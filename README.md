@@ -20,7 +20,7 @@ Recipe builder with visual editing, tagging, and instant KubeJS export.
 ### Fluid slots (modded recipes)
 - Drag a **fluid** from JEI onto a slot that accepts fluids (e.g. Create Mixing water input)
 - A blue `~` indicator appears to confirm fluid mode
-- **Right-click** the fluid slot to adjust the amount in millibuckets (100 mB steps, Shift = 1000 mB)
+- **Right-click** the fluid slot to set the amount in millibuckets: type a value directly, or use **-/+** (100 mB steps, Ctrl = 10 mB, Shift = 1000 mB)
 
 ### Tags as ingredients
 - Right-click a filled slot and select a tag from the list
