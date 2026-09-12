@@ -1124,11 +1124,20 @@ public class RecipeBuilderScreen extends AbstractContainerScreen<RecipeBuilderMe
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256 && activePopup != null) {
-            activePopup = null;
-            return true;
+        if (activePopup != null) {
+            if (keyCode == 256) { // Escape closes the popup
+                activePopup = null;
+                return true;
+            }
+            if (activePopup.keyPressed(keyCode, scanCode, modifiers)) return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        if (activePopup != null && activePopup.charTyped(c, modifiers)) return true;
+        return super.charTyped(c, modifiers);
     }
 
     @Override

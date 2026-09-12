@@ -1,8 +1,11 @@
 package net.astronomy.kubejsrecipeeditor.gui;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 public class FluidSelectionPopup implements RecipePopup {
@@ -13,15 +16,21 @@ public class FluidSelectionPopup implements RecipePopup {
     private static final int MODE_ROW_H    = 14;
     private static final int CLEAR_BTN_H   = 14;
     private static final int CLEAR_BTN_W   = 38;
+    private static final long MAX_AMOUNT   = 128000L;
 
     private final SlotData slot;
     private final int popX, popY, popH;
     private final int minusX, plusX;
+    private final int amtBtnY;
+    // Editable amount field — lets the user type any value (e.g. 33, 250), not just step multiples.
+    private final EditBox amountBox;
     // Mode toggle button: switches between "fluid id" and "fluid tag" modes
     private final int modeBtnX, modeBtnY, modeBtnW;
     // Clear button: clears fluid
     private final int clearBtnX, clearBtnY;
     private boolean keepOpen = false;
+    // Guards against the responder clobbering the field while we programmatically set its value.
+    private boolean suppressResponder = false;
 
     public FluidSelectionPopup(SlotData slot, int screenW, int screenH) {
         this.slot = slot;
@@ -29,8 +38,27 @@ public class FluidSelectionPopup implements RecipePopup {
         popH = PAD + AMOUNT_ROW_H + 2 + FLUID_ROW_H + 2 + MODE_ROW_H + 2 + CLEAR_BTN_H + PAD;
         popX = Math.min(slot.x + slot.w + 2, screenW - W - 4);
         popY = Math.min(slot.y, screenH - popH - 4);
+
+        int amtY = popY + PAD;
+        amtBtnY = amtY + 3;
         minusX = popX + 60;
-        plusX  = popX + 60 + 14 + 30 + 2; // minus(14) + gap(30) + spacing(2)
+        int boxX = minusX + 16;
+        int boxW = 46;
+        plusX  = boxX + boxW + 2;
+
+        amountBox = new EditBox(Minecraft.getInstance().font, boxX, amtBtnY, boxW, 12, Component.empty());
+        amountBox.setMaxLength(6);
+        amountBox.setBordered(true);
+        amountBox.setFilter(s -> s.isEmpty() || s.matches("\\d{1,6}"));
+        amountBox.setResponder(txt -> {
+            if (suppressResponder || txt.isEmpty()) return;
+            try {
+                long v = Long.parseLong(txt);
+                slot.fluidAmount = Math.max(1L, Math.min(MAX_AMOUNT, v));
+            } catch (NumberFormatException ignored) { /* keep previous value */ }
+        });
+        setBoxValue(slot.fluidAmount);
+        amountBox.setFocused(true);
 
         // Mode toggle — right-aligned inside popup
         modeBtnW = 60;
@@ -42,6 +70,12 @@ public class FluidSelectionPopup implements RecipePopup {
         clearBtnY = popY + PAD + AMOUNT_ROW_H + 2 + FLUID_ROW_H + 2 + MODE_ROW_H + 4;
     }
 
+    private void setBoxValue(long value) {
+        suppressResponder = true;
+        amountBox.setValue(String.valueOf(value));
+        suppressResponder = false;
+    }
+
     public void render(GuiGraphics g, Font font, int mouseX, int mouseY) {
         // Background + border
         g.fill(popX - 1, popY - 1, popX + W + 1, popY + popH + 1, 0xFF555555);
@@ -51,16 +85,15 @@ public class FluidSelectionPopup implements RecipePopup {
         int amtY = popY + PAD;
         g.drawString(font, "Amount (mB):", popX + PAD, amtY + 6, 0xFFAAAAAA, false);
 
-        boolean minusHover = mouseX >= minusX && mouseX < minusX + 14 && mouseY >= amtY + 3 && mouseY < amtY + 15;
-        g.fill(minusX, amtY + 3, minusX + 14, amtY + 15, minusHover ? 0xFF666666 : 0xFF444444);
+        boolean minusHover = mouseX >= minusX && mouseX < minusX + 14 && mouseY >= amtBtnY && mouseY < amtBtnY + 12;
+        g.fill(minusX, amtBtnY, minusX + 14, amtBtnY + 12, minusHover ? 0xFF666666 : 0xFF444444);
         g.drawString(font, "-", minusX + 4, amtY + 5, 0xFFFFFFFF, false);
 
-        String amtStr = String.valueOf(slot.fluidAmount);
-        int aw = font.width(amtStr);
-        g.drawString(font, amtStr, minusX + 14 + (30 - aw) / 2, amtY + 6, 0xFFFFFFFF, false);
+        // Editable amount field (type any value)
+        amountBox.render(g, mouseX, mouseY, 0f);
 
-        boolean plusHover = mouseX >= plusX && mouseX < plusX + 14 && mouseY >= amtY + 3 && mouseY < amtY + 15;
-        g.fill(plusX, amtY + 3, plusX + 14, amtY + 15, plusHover ? 0xFF666666 : 0xFF444444);
+        boolean plusHover = mouseX >= plusX && mouseX < plusX + 14 && mouseY >= amtBtnY && mouseY < amtBtnY + 12;
+        g.fill(plusX, amtBtnY, plusX + 14, amtBtnY + 12, plusHover ? 0xFF666666 : 0xFF444444);
         g.drawString(font, "+", plusX + 3, amtY + 5, 0xFFFFFFFF, false);
 
         // ── Separator ────────────────────────────────────────────────────────
@@ -109,9 +142,9 @@ public class FluidSelectionPopup implements RecipePopup {
                 clearHover ? 0xFF884444 : 0xFF553333);
         g.drawCenteredString(font, "Clear", clearBtnX + CLEAR_BTN_W / 2, clearBtnY + 3, 0xFFFFAAAA);
 
-        // Hint for steps
+        // Hint
         int hintX = clearBtnX + CLEAR_BTN_W + 6;
-        g.drawString(font, "Ctrl=×10  Shift=×1000", hintX, clearBtnY + 3, 0xFF666666, false);
+        g.drawString(font, "Type amount, or ± (Ctrl=10 Shift=1000)", hintX, clearBtnY + 3, 0xFF666666, false);
     }
 
     public boolean mouseClicked(int mouseX, int mouseY) {
@@ -119,17 +152,26 @@ public class FluidSelectionPopup implements RecipePopup {
         boolean shift = Screen.hasShiftDown();
         boolean ctrl  = Screen.hasControlDown();
         long step = shift ? 1000L : ctrl ? 10L : 100L;
-        int amtY = popY + PAD;
+
+        // Amount text field — click to focus and edit directly
+        if (amountBox.isMouseOver(mouseX, mouseY)) {
+            amountBox.setFocused(true);
+            amountBox.mouseClicked(mouseX, mouseY, 0);
+            keepOpen = true;
+            return true;
+        }
 
         // Minus button
-        if (mouseX >= minusX && mouseX < minusX + 14 && mouseY >= amtY + 3 && mouseY < amtY + 15) {
+        if (mouseX >= minusX && mouseX < minusX + 14 && mouseY >= amtBtnY && mouseY < amtBtnY + 12) {
             slot.fluidAmount = Math.max(1L, slot.fluidAmount - step);
+            setBoxValue(slot.fluidAmount);
             keepOpen = true;
             return true;
         }
         // Plus button
-        if (mouseX >= plusX && mouseX < plusX + 14 && mouseY >= amtY + 3 && mouseY < amtY + 15) {
-            slot.fluidAmount = Math.min(128000L, slot.fluidAmount + step);
+        if (mouseX >= plusX && mouseX < plusX + 14 && mouseY >= amtBtnY && mouseY < amtBtnY + 12) {
+            slot.fluidAmount = Math.min(MAX_AMOUNT, slot.fluidAmount + step);
+            setBoxValue(slot.fluidAmount);
             keepOpen = true;
             return true;
         }
@@ -160,6 +202,33 @@ public class FluidSelectionPopup implements RecipePopup {
             return true;
         }
         return isInside(mouseX, mouseY);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (amountBox.isFocused()) {
+            // Commit an empty field back to a valid minimum before Enter closes editing.
+            if ((keyCode == 257 || keyCode == 335) && amountBox.getValue().isEmpty()) {
+                slot.fluidAmount = 1L;
+                setBoxValue(slot.fluidAmount);
+                keepOpen = true;
+                return true;
+            }
+            if (amountBox.keyPressed(keyCode, scanCode, modifiers)) {
+                keepOpen = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        if (amountBox.isFocused() && amountBox.charTyped(c, modifiers)) {
+            keepOpen = true;
+            return true;
+        }
+        return false;
     }
 
     public boolean keepOpen() { return keepOpen; }
