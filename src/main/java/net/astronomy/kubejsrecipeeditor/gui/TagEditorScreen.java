@@ -26,8 +26,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -259,16 +261,64 @@ public class TagEditorScreen extends AbstractContainerScreen<RecipeBuilderMenu> 
         allTags.clear();
         try {
             var reg = Minecraft.getInstance().level.registryAccess();
+            Map<ResourceLocation, Set<String>> pending = loadAllPendingRemovals();
             Stream<ResourceLocation> keys = switch (tagType) {
-                case 1 -> reg.registryOrThrow(Registries.BLOCK).getTags().map(p -> p.getFirst().location());
-                case 2 -> reg.registryOrThrow(Registries.FLUID).getTags().map(p -> p.getFirst().location());
-                default -> reg.registryOrThrow(Registries.ITEM).getTags().map(p -> p.getFirst().location());
+                case 1 -> reg.registryOrThrow(Registries.BLOCK).getTags()
+                        .filter(p -> hasRemainingItems(p.getFirst().location(), p.getSecond(), pending))
+                        .map(p -> p.getFirst().location());
+                case 2 -> reg.registryOrThrow(Registries.FLUID).getTags()
+                        .filter(p -> hasRemainingItems(p.getFirst().location(), p.getSecond(), pending))
+                        .map(p -> p.getFirst().location());
+                default -> reg.registryOrThrow(Registries.ITEM).getTags()
+                        .filter(p -> hasRemainingItems(p.getFirst().location(), p.getSecond(), pending))
+                        .map(p -> p.getFirst().location());
             };
             keys.sorted(Comparator.comparing(ResourceLocation::toString)).forEach(allTags::add);
         } catch (Exception e) {
             KubeJsRecipeEditor.LOGGER.error("Failed to load tags: {}", e.getMessage());
         }
         filterTags(searchBox != null ? searchBox.getValue() : "");
+    }
+
+    private boolean hasRemainingItems(ResourceLocation tagId,
+                                      net.minecraft.core.HolderSet.Named<?> holders,
+                                      Map<ResourceLocation, Set<String>> pending) {
+        if (holders.size() == 0) return false;
+        Set<String> removals = pending.get(tagId);
+        if (removals == null || removals.isEmpty()) return true;
+        // At least one holder must NOT be in pending removals for the tag to be non-empty.
+        // This correctly handles accumulated script entries from past reload cycles.
+        for (var h : holders) {
+            var key = h.unwrapKey();
+            if (key.isEmpty() || !removals.contains(key.get().location().toString())) return true;
+        }
+        return false;
+    }
+
+    private Map<ResourceLocation, Set<String>> loadAllPendingRemovals() {
+        Map<ResourceLocation, Set<String>> result = new LinkedHashMap<>();
+        Path dir = gameDir().resolve("kubejs/server_scripts/tags/removals");
+        String typeFile = typeStr() + ".js";
+        if (!Files.isDirectory(dir)) return result;
+        try (var walk = Files.walk(dir)) {
+            walk.filter(p -> p.getFileName().toString().equals(typeFile))
+                .forEach(f -> {
+                    try {
+                        for (String raw : Files.readAllLines(f)) {
+                            String line = raw.strip();
+                            if (!line.startsWith("event.remove('") || !line.endsWith("')")) continue;
+                            String inner = line.substring("event.remove('".length(), line.length() - 2);
+                            int sep = inner.indexOf("', '");
+                            if (sep < 0) continue;
+                            ResourceLocation tagRl = ResourceLocation.tryParse(inner.substring(0, sep));
+                            String itemId = inner.substring(sep + 4);
+                            if (tagRl != null)
+                                result.computeIfAbsent(tagRl, k -> new LinkedHashSet<>()).add(itemId);
+                        }
+                    } catch (Exception ignored) {}
+                });
+        } catch (Exception ignored) {}
+        return result;
     }
 
     private void filterTags(String query) {
@@ -304,6 +354,15 @@ public class TagEditorScreen extends AbstractContainerScreen<RecipeBuilderMenu> 
             }
         } catch (Exception e) {
             KubeJsRecipeEditor.LOGGER.error("Failed to load items for tag {}: {}", editingTag, e.getMessage());
+        }
+        // Remove items already scripted for removal so the editor shows the intended
+        // post-reload state even before the client registry has been refreshed.
+        Set<String> pendingRemovals = readExistingRemovals(editingTag);
+        if (!pendingRemovals.isEmpty()) {
+            editItems.removeIf(stack -> {
+                String id = getRegistryId(stack);
+                return id != null && pendingRemovals.contains(id);
+            });
         }
         originalEditItems.addAll(editItems);
     }
@@ -707,19 +766,26 @@ public class TagEditorScreen extends AbstractContainerScreen<RecipeBuilderMenu> 
             Set<String> existingAdditions = readExistingAdditions(editingTag);
             Set<String> existingRemovals  = readExistingRemovals(editingTag);
 
-            if (toRemove.isEmpty()) {
-                // Additions only — append-only JSON; cancel any conflicting removals
-                Set<String> newAdditions = new LinkedHashSet<>(existingAdditions);
-                Set<String> newRemovals  = new LinkedHashSet<>(existingRemovals);
-                toAdd.forEach(id -> { newRemovals.remove(id); newAdditions.add(id); });
-                writeJsonFile(editingTag, newAdditions);
-                writeScriptFile(editingTag, newRemovals, null); // keep removals, no full-replace
-            } else {
-                // Removals present — use removeAll+add for reliability against sub-tag inclusions.
-                // The script takes full ownership of this tag; delete the JSON.
-                deleteJsonFile(editingTag);
-                writeScriptFile(editingTag, Set.of(), currentIds); // full-replace mode
+            // Always remove from JSON if present (un-add), AND always emit event.remove().
+            // Emitting event.remove() even for JSON-only items is a no-op after reload if the
+            // item wasn't native, but is required when the item also exists natively in the tag.
+            Set<String> newAdditions = new LinkedHashSet<>(existingAdditions);
+            newAdditions.addAll(toAdd);
+            newAdditions.removeAll(toRemove);
+
+            Set<String> newRemovals = new LinkedHashSet<>(existingRemovals);
+            newRemovals.addAll(toRemove);
+            toAdd.forEach(newRemovals::remove); // cancel removal if re-adding
+
+            // If the tag is now empty and every original item came from our JSON
+            // (no native members from other mods), event.remove on a deleted tag is
+            // useless — clean the script section so the file doesn't accumulate junk.
+            if (currentIds.isEmpty() && existingAdditions.containsAll(originalIds)) {
+                newRemovals.clear();
             }
+
+            writeJsonFile(editingTag, newAdditions);
+            writeScriptFile(editingTag, newRemovals, null);
             statusMessage = "Saved — run /reload";
             statusColor   = 0x55FF55;
             exitEditMode();
@@ -758,7 +824,7 @@ public class TagEditorScreen extends AbstractContainerScreen<RecipeBuilderMenu> 
     }
 
     private Set<String> readExistingRemovals(ResourceLocation tagId) {
-        Path f = scriptFile();
+        Path f = scriptFile(tagId);
         if (!Files.exists(f)) return new LinkedHashSet<>();
         try {
             Set<String> ids = new LinkedHashSet<>();
@@ -803,7 +869,7 @@ public class TagEditorScreen extends AbstractContainerScreen<RecipeBuilderMenu> 
      */
     private void writeScriptFile(ResourceLocation tagId, Set<String> directRemovals,
                                   Set<String> fullWanted) throws Exception {
-        Path f = scriptFile();
+        Path f = scriptFile(tagId);
 
         // Parse all existing sections from the script (keyed by tagId string)
         java.util.Map<String, String> sections = parseScriptSections(f);
@@ -894,9 +960,9 @@ public class TagEditorScreen extends AbstractContainerScreen<RecipeBuilderMenu> 
                 + "/tags/" + typeStr() + "/" + tagId.getPath() + ".json");
     }
 
-    private Path scriptFile() {
+    private Path scriptFile(ResourceLocation tagId) {
         return gameDir().resolve("kubejs/server_scripts/tags/removals/"
-                + editingTag.getNamespace() + "/" + typeStr() + ".js");
+                + tagId.getNamespace() + "/" + typeStr() + ".js");
     }
 
     private String getRegistryId(ItemStack stack) {
