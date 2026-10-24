@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.148'
 }
-version = '0.12.0'
+version = '0.12.1'
 group = 'dev.kubejseditor'
 base { archivesName = 'kubejs-editor' }
 java { toolchain.languageVersion = JavaLanguageVersion.of(21); withSourcesJar() }
@@ -19,7 +19,7 @@ neoForge {
     version = providers.gradleProperty('neoForgeVersion').getOrElse('21.1.251')
     parchment { minecraftVersion = '1.21.1'; mappingsVersion = '2024.11.17' }
     runs {
-        client { client(); gameDirectory = file(project.findProperty('clientDir') ?: 'run-client'); if(project.hasProperty('verifyClient')){ systemProperty 'kubejs.editor.verifyClient','true'; programArguments.addAll '--width','1600','--height','900' }; if(project.hasProperty('verifyTypes')){systemProperty 'kubejs.editor.verifyTypes','true';programArguments.addAll '--width','1600','--height','900'}; if(project.hasProperty('verifyCanvas')){systemProperty 'kubejs.editor.verifyCanvas','true';programArguments.addAll '--width','1600','--height','900'}; if(project.hasProperty('verifyUndo')){systemProperty 'kubejs.editor.verifyUndo','true';programArguments.addAll '--width','1600','--height','900'} }
+        client { client(); gameDirectory = file(project.findProperty('clientDir') ?: 'run-client'); if(project.hasProperty('verifyClient')){ systemProperty 'kubejs.editor.verifyClient','true'; programArguments.addAll '--width','1600','--height','900' }; if(project.hasProperty('verifyTypes')){systemProperty 'kubejs.editor.verifyTypes','true';programArguments.addAll '--width','1600','--height','900'}; if(project.hasProperty('verifyCanvas')){systemProperty 'kubejs.editor.verifyCanvas','true';programArguments.addAll '--width','1600','--height','900'}; if(project.hasProperty('verifyUndo')){systemProperty 'kubejs.editor.verifyUndo','true';programArguments.addAll '--width','1600','--height','900'}; if(project.hasProperty('verifyReloadResilience')){systemProperty 'kubejs.editor.verifyReloadResilience','true';programArguments.addAll '--width','1600','--height','900'}; if(project.hasProperty('verifyPackRevoke')){systemProperty 'kubejs.editor.verifyPackRevoke','true';programArguments.addAll '--width','1600','--height','900'} }
         server { server(); gameDirectory = file(project.findProperty('serverDir') ?: 'run-server'); programArgument '--nogui'; systemProperty 'kubejs.editor.verify', 'true' }
         client { if(project.hasProperty('verifyVintage')){systemProperty 'kubejs.editor.verifyVintage','true';programArguments.addAll '--width','1600','--height','900'} }
         gameTestServer { type = 'gameTestServer'; gameDirectory = file('run-gametest') }

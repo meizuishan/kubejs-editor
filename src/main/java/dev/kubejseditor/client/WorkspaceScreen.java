@@ -152,6 +152,8 @@ public final class WorkspaceScreen extends Screen {
         new ChoiceScreen.Choice("导出",()->run(()->status="已导出："+EditorRuntime.export())),
         new ChoiceScreen.Choice("整批回滚",()->run(()->{EditorRuntime.rollback();recipe=null;item=null;dirty=false;review=null;status="已恢复文件，正在重载";if(EditorRuntime.requiresRestart())status="回滚已保存，请重启游戏";else EditorRuntime.reloadResult(false,r->{status=r.success()?"已整批回滚并重载，待处理操作保留":r.message();refreshRuntime();rebuildWidgets();});})),
         new ChoiceScreen.Choice("KJS 日志",()->showText("KubeJS 日志",EditorRuntime.logs())),
+        new ChoiceScreen.Choice("最近诊断",()->showText("最近诊断",dev.kubejseditor.runtime.EditorDiagnostics.read(EditorRuntime.root()))),
+        new ChoiceScreen.Choice("复制最近诊断",()->{String text=dev.kubejseditor.runtime.EditorDiagnostics.read(EditorRuntime.root());minecraft.keyboardHandler.setClipboard(text);status="已复制最近诊断";rebuildWidgets();}),
         new ChoiceScreen.Choice("兼容信息",()->showText("兼容信息",EditorCompatibility.report())),
         new ChoiceScreen.Choice("重载配方模板",()->{stage();RecipeTemplates.load(EditorRuntime.root(),EditorCompatibility::requirement);refreshRuntime();showText("配方模板",RecipeTemplates.DIRECTORY+"\n\n"+String.join("\n",RecipeTemplates.diagnostics())+"\n\n模板只定义表单和校验，不执行代码；添加、替换或取消模板后请检查待办。未适配的原始配方数据仍保留。");}),
         new ChoiceScreen.Choice("刷新运行数据",()->{refreshRuntime();review=null;})
@@ -275,7 +277,7 @@ public final class WorkspaceScreen extends Screen {
     private void queueRecipeRemoval(String id,JsonObject data){
         EditorRuntime.requireEditable();
         boolean exists=EditorRuntime.state().applied.recipes.containsKey(id)||loaded.stream().anyMatch(r->r.id().equals(id));
-        if(exists){RecipeDraft removal=new RecipeDraft(id,data==null?new JsonObject():data);removal.operation="remove";project.recipes.put(id,removal);}else project.recipes.remove(id);
+        if(exists){RecipeDraft removal=new RecipeDraft(id,data==null?new JsonObject():data);removal.operation="remove";var prior=EditorRuntime.state().applied.recipes.get(id);if(prior!=null&&prior.source!=null)removal.source=prior.source.deepCopy();else if(prior==null&&data!=null)removal.source=data.deepCopy();project.recipes.put(id,removal);}else project.recipes.remove(id);
         if(recipe!=null&&recipe.id.equals(id)){recipe=null;selectedSlot=null;dirty=false;readOnly=false;appliedRecipeSelection=null;}
         review=null;status=exists?"已加入禁用待办，应用后不能使用此配方":"已移除未应用草稿";try{EditorRuntime.saveDraft();}catch(Exception e){throw new IllegalStateException(e);}rebuildWidgets();
     }
@@ -284,6 +286,9 @@ public final class WorkspaceScreen extends Screen {
     private void selectRecipe(RecipeDraft r,boolean ro){stage();try{SimpleRecipes.restore(r);}catch(Exception error){ro=true;status=error.getMessage();}appliedRecipeSelection=null;recipe=ProjectStore.JSON.fromJson(ProjectStore.JSON.toJson(r),RecipeDraft.class);if(recipe.data!=null&&RecipeAdapters.get(recipe.data.get("type").getAsString()) instanceof SimpleRecipeAdapter)recipe.simple=true;if(!project.recipes.containsKey(r.id)&&!recipe.operation.equals("remove")&&loaded.stream().anyMatch(v->v.id().equals(r.id)))recipe.operation="replace";if(recipe.origin==null){var prior=EditorRuntime.state().applied.recipes.get(recipe.id);recipe.origin=prior!=null?(prior.origin!=null?prior.origin:prior.operation.equals("add")?"add":"existing"):r.operation.equals("add")?"add":"existing";}recipeIdText=recipe.id;item=null;readOnly=ro||EditorRuntime.locked();dirty=false;selectedSlot=null;propertyOffset=canvasScroll=canvasScrollX=0;rebuildWidgets();}
     private void selectLoaded(EditorRuntime.Loaded r){
         if(project.recipes.containsKey(r.id())){selectRecipe(project.recipes.get(r.id()),false);return;}RecipeDraft d=new RecipeDraft(r.id(),r.data()==null?RecipeAdapters.parse("{type:'minecraft:crafting_shapeless',ingredients:[],result:{id:'minecraft:air'}}"):r.data());d.operation="replace";var prior=EditorRuntime.state().applied.recipes.get(r.id());if(prior!=null&&prior.grid!=null&&!EditorRuntime.state().frozen.getOrDefault(WorkspaceState.GENERATED.getFirst(),Set.of()).contains(r.id()))d.grid=prior.grid.copy();
+        // Keep the first external snapshot for revocation verification; legacy applied rules
+        // without a snapshot stay presence-only rather than storing their edited data as source.
+        if(prior!=null){if(prior.source!=null)d.source=prior.source.deepCopy();}else if(d.data!=null)d.source=d.data.deepCopy();
         selectRecipe(d,r.error()!=null);status=r.error()==null?(recipe.simple?"实验适配：已导入原生字段，可查看适配依据":"已导入当前配方，修改后暂存为覆盖"):r.error();
     }
     private void selectItem(ItemDraft i){stage();appliedRecipeSelection=null;item=ProjectStore.JSON.fromJson(ProjectStore.JSON.toJson(i),ItemDraft.class);itemIdText=item.id;recipe=null;readOnly=EditorRuntime.locked()||EditorRuntime.state().frozen.entrySet().stream().anyMatch(e->!e.getKey().equals(WorkspaceState.GENERATED.getFirst())&&e.getValue().contains(i.id));dirty=false;propertyOffset=canvasScroll=canvasScrollX=0;rebuildWidgets();}

@@ -21,7 +21,11 @@ public final class IntegrationVerification {
     private final List<String> failures=new ArrayList<>();private int checks;
     public IntegrationVerification(){
         // Match production startup: do not scan third-party dev-only GameTests with optional APIs.
-        if(Boolean.getBoolean("kubejs.editor.verifyPackStartup")||Boolean.getBoolean("kubejs.editor.researchPack")){net.minecraft.SharedConstants.IS_RUNNING_IN_IDE=false;System.setProperty("neoforge.enableGameTest","false");}
+        if(Boolean.getBoolean("kubejs.editor.verifyPackStartup")||Boolean.getBoolean("kubejs.editor.verifyPackRevoke")||Boolean.getBoolean("kubejs.editor.verifyReloadResilience")||Boolean.getBoolean("kubejs.editor.researchPack")){net.minecraft.SharedConstants.IS_RUNNING_IN_IDE=false;System.setProperty("neoforge.enableGameTest","false");}
+        System.out.println("[KubeJS Editor Verification] flags: packRevoke="+Boolean.getBoolean("kubejs.editor.verifyPackRevoke")
+                +", reloadResilience="+Boolean.getBoolean("kubejs.editor.verifyReloadResilience")
+                +", undo="+Boolean.getBoolean("kubejs.editor.verifyUndo")
+                +", packStartup="+Boolean.getBoolean("kubejs.editor.verifyPackStartup"));
         if(Boolean.getBoolean("kubejs.editor.verify"))NeoForge.EVENT_BUS.addListener(this::started);
     }
     private void check(boolean pass,String message){checks++;if(!pass)failures.add(message);}

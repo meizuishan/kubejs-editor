@@ -1,8 +1,10 @@
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
+$buildText=Get-Content -LiteralPath (Join-Path $projectRoot 'build.gradle') -Raw
+if($buildText -notmatch "(?m)^version\s*=\s*'([^']+)'"){throw 'Cannot determine version'}
+$name="kubejs-editor-$($Matches[1]).jar"
 $root=Join-Path $projectRoot ('build/installer-tests/'+[guid]::NewGuid().ToString())
 $release=Join-Path $root 'release';New-Item -ItemType Directory -Force -Path $release | Out-Null
-$name='kubejs-editor-0.12.0.jar'
 Copy-Item -LiteralPath (Join-Path $projectRoot ('build/libs/'+$name)) -Destination (Join-Path $release $name)
 ((Get-FileHash -LiteralPath (Join-Path $release $name)).Hash+'  '+$name) | Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS.txt')
 $checks=0

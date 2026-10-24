@@ -30,12 +30,18 @@ public final class EditorProject {
         public boolean simple;
         public boolean enabled = true;
         public JsonObject data;
+        /**
+         * Optional snapshot of the source recipe before this rule first replaced or disabled it.
+         * Never emitted into generated scripts; schema 2 readers without this field keep working.
+         */
+        public JsonObject source;
         public RecipeDraft() {}
         public RecipeDraft(String id, JsonObject data) { this.id = id; this.data = data.deepCopy(); }
         public String actionLabel(){return !enabled?"规则未启用":operation.equals("remove")?"已禁用":operation.equals("add")||"add".equals(origin)?"新增":"已替换";}
         public RecipeDraft copy(String newId) {
             RecipeDraft d = new RecipeDraft(newId, data == null ? new JsonObject() : data);
-            d.enabled = enabled;d.origin=origin;d.simple=simple;d.grid=grid==null?null:grid.copy();return d;
+            d.enabled = enabled;d.origin=origin;d.simple=simple;d.grid=grid==null?null:grid.copy();
+            d.source=source==null?null:source.deepCopy();return d;
         }
     }
     /** Editor placement stays separate from the trimmed recipe consumed by Minecraft. */
@@ -78,6 +84,7 @@ public final class EditorProject {
             requireId(id); if (d == null || !id.equals(d.id)) throw new IllegalArgumentException("草稿配方 ID 不一致：" + id);
             if (!Set.of("add", "replace", "remove").contains(d.operation)) throw new IllegalArgumentException("未知操作：" + d.operation);
             if(d.grid!=null&&(d.grid.size<1||d.grid.size>9||d.grid.cells==null||d.grid.cells.size()!=d.grid.size*d.grid.size))throw new IllegalArgumentException("配方画布网格无效："+id);
+            if(d.source!=null&&!d.source.isJsonObject())throw new IllegalArgumentException("来源配方快照无效："+id);
             if (!d.operation.equals("remove") && (d.data == null || !d.data.has("type"))) throw new IllegalArgumentException("配方缺少类型：" + id);
         });
         scripts.forEach((path,d)->{

@@ -1,6 +1,6 @@
 # KubeJS Editor
 
-Minecraft 1.21.1 / NeoForge 的游戏内 KubeJS 可视化编辑器，当前版本 **0.12.0**。
+Minecraft 1.21.1 / NeoForge 的游戏内 KubeJS 可视化编辑器，当前版本 **0.12.1**。
 
 进入世界后按 **K** 或执行 `/kubejseditor`（保留 `/kjseditor`）。顶部依次为新增功能、修改现有、机械动力、已有修改、强制兼容；实验功能集中在最后一栏。支持 JEI 拖放和准确配方 ID 的侧边编辑按钮。
 
@@ -28,8 +28,8 @@ Minecraft 1.21.1 / NeoForge 的游戏内 KubeJS 可视化编辑器，当前版�
 - [来源与许可](NOTICE.md)：Astronomy20 的 MIT 工程与 ViScriptRecipe 交互参考。
 - `examples/`：不会自动执行的独立示例。
 
-产物：`build/libs/kubejs-editor-0.12.0.jar`。默认开发依赖锁定 JEI 19.69.0.457、Create 6.0.10；运行支持 JEI 19.27.0.335 起的 19 系列，具体实测组合见兼容性报告。航空学 1.3.2 等兼容快照用于隔离验证，不随发布包分发。当前 Jar 不适用于 Forge、Fabric 或其他 Minecraft 版本。
+产物：`build/libs/kubejs-editor-0.12.1.jar`。默认开发依赖锁定 JEI 19.69.0.457、Create 6.0.10；运行支持 JEI 19.27.0.335 起的 19 系列，具体实测组合见兼容性报告。航空学 1.3.2 等兼容快照用于隔离验证，不随发布包分发。当前 Jar 不适用于 Forge、Fabric 或其他 Minecraft 版本。
 
 支持当前槽位的物品/流体搜索和标签候选、点击错误定位字段、拖动三栏分隔线并保存宽度，以及通过 JSON 扩展常见加工类型。Create 是可选依赖；缺失模组的旧草稿保留并显示原因。源码可直接从公开仓库解析固定依赖构建，不需要本机 libs。常用按钮和表单已提供中英文资源，详细诊断和部分动态文本仍为中文。
 
-作物及存储注册见 [操作说明](docs/REGISTRATION.md)：存储支持 1～9 行、1～12 列、单格 1～4096，默认 3×9、64/格。0.12.0 提供默认关闭的[简单配方强制兼容实验模式](docs/SIMPLE_RECIPES.md)，可编辑符合条件的未知机器配方，保留 JEI 19.27 下限。NeoForge 最低版本调整为 21.1.251。
+作物及存储注册见 [操作说明](docs/REGISTRATION.md)：存储支持 1～9 行、1～12 列、单格 1～4096，默认 3×9、64/格。0.12.0 提供默认关闭的[简单配方强制兼容实验模式](docs/SIMPLE_RECIPES.md)，可编辑符合条件的未知机器配方，保留 JEI 19.27 下限。NeoForge 最低版本调整为 21.1.251。0.12.1 修复本机重载被包内第三方 `OnDatapackSyncEvent` 监听器打断时撤销只能回滚的问题，并把最近异常写入 `kubejs/config/kubejs_editor/last-diagnostic.json` 供“更多”查看和复制。

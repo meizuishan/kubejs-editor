@@ -10,7 +10,11 @@ import dev.kubejseditor.script.KjsGenerator;
 import dev.kubejseditor.storage.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.common.ClientboundUpdateTagsPacket;
+import net.minecraft.network.protocol.game.ClientboundUpdateRecipesPacket;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagNetworkSerialization;
 import net.minecraft.world.item.crafting.*;
 import dev.kubejseditor.export.GenericFormatter;
 import java.io.IOException;
@@ -225,6 +229,7 @@ public final class EditorRuntime {
     /** Revoke exactly one active editor rule, keeping all pending authoring work unsubmitted. */
     public static void revokeRecipe(String id,java.util.function.Consumer<ReloadResult> result)throws IOException{
         requireEditable();if(!canApply())throw new IOException("只能撤销本机单人实例中的修改");
+        System.out.println("[KubeJS Editor] 撤销配方："+id);
         WorkspaceState next=WorkspaceState.copy(state(),WorkspaceState.class);EditorProject desired=next.withoutRecipe(id);
         String base=WorkspaceState.GENERATED.getFirst(),target=next.outputPath(base);
         if(!next.isManaged(target))throw new IOException("无法定位此规则的生成文件，请从脚本管理检查来源");
@@ -332,7 +337,8 @@ public final class EditorRuntime {
         requireEditable();
         WorkspaceState next=prepared.remove(review);if(next==null)throw new IOException("预览已失效，请重新预览");
         if(review.changes().isEmpty())throw new IOException("没有需要应用的文件更改");
-        applying=true;try{lastBackup=FileTransaction.apply(review);state=next;activationError="";return lastBackup;}finally{applying=false;}
+        System.out.println("[KubeJS Editor] 应用文件事务："+review.changes().size()+" 个文件");
+        applying=true;try{lastBackup=FileTransaction.apply(review);state=next;activationError="";System.out.println("[KubeJS Editor] 文件事务已写入："+lastBackup);return lastBackup;}finally{applying=false;}
     }
     private static Path backup()throws IOException{
         if(lastBackup==null){Path pointer=root().resolve("kubejs/config/kubejs_editor/last-transaction.txt");if(Files.exists(pointer))lastBackup=FileTransaction.checkedPath(root(),Files.readString(pointer));}
@@ -341,8 +347,12 @@ public final class EditorRuntime {
     public static void rollback()throws IOException{
         if(!canApply()||busy())throw new IOException("当前不能回滚");Path b=backup();
         boolean restart=Files.readAllLines(b.resolve("manifest.tsv")).stream().anyMatch(s->s.contains("/startup_scripts/")||s.endsWith(".toml"));
-        FileTransaction.rollback(root(),b);EditorProject restored=ProjectStore.read(root());copyPending(restored);state=WorkspaceState.read(root());CreateConfigs.restore(project);
+        System.err.println("[KubeJS Editor] 整批回滚："+b);
+        FileTransaction.rollback(root(),b);EditorProject restored=ProjectStore.read(root());copyPending(restored);state=WorkspaceState.read(root());activationError="";CreateConfigs.restore(project);
         if(restart)FileTransaction.atomicWrite(root().resolve(RESTART_MARKER),restartMarker());
+        var diagnostic=new EditorDiagnostics.Diagnostic();diagnostic.operation="rollback";diagnostic.phase="complete";diagnostic.outcome="success";diagnostic.message="已恢复事务前文件";
+        try{diagnostic.backup=root().relativize(b).toString().replace('\\','/');}catch(Exception ignored){diagnostic.backup=b.toString();}
+        EditorDiagnostics.record(root(),diagnostic);
     }
     private static void copyPending(EditorProject value){project.recipes=value.recipes;project.items=value.items;project.configs=value.configs;project.assets=value.assets;project.scripts=value.scripts;}
     public static Path export()throws IOException{
@@ -356,8 +366,9 @@ public final class EditorRuntime {
         for(var e:output.entrySet()){if(e.getValue()==null){deletions.add(e.getKey());continue;}Path f=folder.resolve(e.getKey());Files.createDirectories(f.getParent());Files.write(f,e.getValue());}
         if(!deletions.isEmpty())Files.write(folder.resolve("DELETE_FILES.txt"),deletions);return folder;
     }
-    private static void verifyActivation()throws IOException{
-        var a=state.activation;if(a==null)return;
+    private static List<String> verifyActivation()throws IOException{
+        var a=state.activation;if(a==null)return List.of();
+        List<String> notes=new ArrayList<>();
         if(!ProjectStore.JSON.toJsonTree(ProjectStore.read(root())).equals(ProjectStore.JSON.toJsonTree(project)))throw new IOException("草稿文件与当前编辑不同，请先保存草稿或重新载入后合并");
         for(var e:a.hashes.entrySet())if(!e.getKey().equals(ProjectStore.FILE)&&!e.getValue().equals(WorkspaceState.hash(FileTransaction.checkedPath(root(),e.getKey()))))throw new IOException("待生效文件发生变化："+e.getKey());
         List<String> errors=new ArrayList<>(ScriptIndex.errors(dev.latvian.mods.kubejs.script.ConsoleJS.SERVER));
@@ -371,6 +382,27 @@ public final class EditorRuntime {
             if(d.operation.equals("remove")?found.isPresent():found.isEmpty())throw new IOException("配方生效状态不符合预览："+d.id);
             if(!d.operation.equals("remove"))verifyRecipeContent(d,found.orElseThrow());
         }
+        // A revoked rule must really be gone or truly restored; checking only desired recipes
+        // would report success even when KJS left the edited recipe in place.
+        if(a.revokedRecipes!=null)for(String id:a.revokedRecipes){
+            var old=state.applied.recipes.get(id);
+            var found=server.getRecipeManager().byKey(ResourceLocation.parse(id));
+            if(old==null){notes.add("撤销记录缺少原规则，仅核对当前状态："+id);continue;}
+            boolean editorAdded="add".equals(old.origin)||(old.origin==null&&"add".equals(old.operation));
+            if(editorAdded){
+                if(found.isPresent()){
+                    String external=ScriptIndex.recipeSources().get(id);
+                    if(external==null)throw new IOException("撤销新增后配方仍然存在："+id);
+                    notes.add("撤销新增后由外部脚本恢复此 ID："+id+" · "+external);
+                }
+            }else{
+                if(found.isEmpty())throw new IOException("撤销后来源配方未恢复："+id);
+                if(old.source!=null&&old.source.isJsonObject()){
+                    try{verifyRecipeData(id,old.source,found.orElseThrow());}
+                    catch(IOException mismatch){notes.add("恢复的来源内容与快照不同（可能由其他脚本再次修改）："+id+" · "+mismatch.getMessage());}
+                }else notes.add("来源快照缺失，仅核对存在性："+id);
+            }
+        }
         for(var config:a.desired.configs){
             var entry=CreateConfigs.list().stream().filter(e->e.config().getModId().equals(config.modId)&&e.config().getFileName().equals(config.file)&&e.config().getType().name().equals(config.type)&&e.path().equals(config.path)&&(config.target==null||e.file().equals(root().resolve(config.target).normalize()))).findFirst();
             if(entry.isEmpty()||!Objects.equals(entry.get().current(),entry.get().parse(config.value)))throw new IOException("模组参数尚未生效或所属世界未加载："+config.modId+" / "+config.path);
@@ -380,20 +412,28 @@ public final class EditorRuntime {
             ResourceLocation loc=ResourceLocation.parse(id);
             if(BuiltInRegistries.ITEM.containsKey(loc)||BuiltInRegistries.BLOCK.containsKey(loc)||BuiltInRegistries.BLOCK_ENTITY_TYPE.containsKey(loc))throw new IOException("删除尚未生效，物品或方块仍被其他来源注册："+id);
         }
+        return List.copyOf(notes);
     }
     @SuppressWarnings({"rawtypes","unchecked"})
     private static void verifyRecipeContent(EditorProject.RecipeDraft draft,RecipeHolder<?> actual)throws IOException{
-        try{
-            var serializer=BuiltInRegistries.RECIPE_SERIALIZER.get(ResourceLocation.parse(draft.data.get("type").getAsString()));
-            com.mojang.serialization.Codec codec=serializer.codec().codec();var ops=Minecraft.getInstance().level.registryAccess().createSerializationContext(JsonOps.INSTANCE);
-            Object expected=codec.parse(ops,CraftingGrid.generated(draft)).getOrThrow(),loaded=codec.parse(ops,GenericFormatter.encodeRecipe(actual)).getOrThrow();
-            if(!codec.encodeStart(ops,expected).getOrThrow().equals(codec.encodeStart(ops,loaded).getOrThrow()))throw new IOException("配方内容与预览不同："+draft.id+"\n预期："+codec.encodeStart(ops,expected).getOrThrow()+"\n实际："+codec.encodeStart(ops,loaded).getOrThrow());
-        }catch(IOException error){throw error;}catch(Exception error){throw new IOException("无法确认配方实际内容："+draft.id+" · "+error.getMessage(),error);}
+        verifyRecipeData(draft.id,CraftingGrid.generated(draft),actual);
     }
-    private static void promote()throws IOException{
-        verifyActivation();var next=WorkspaceState.copy(state,WorkspaceState.class);EditorProject remaining=WorkspaceState.copy(project,EditorProject.class);next.promote(remaining);
+    @SuppressWarnings({"rawtypes","unchecked"})
+    private static void verifyRecipeData(String id,JsonObject expectedData,RecipeHolder<?> actual)throws IOException{
+        try{
+            if(expectedData==null||!expectedData.has("type"))throw new IOException("缺少配方类型");
+            var serializer=BuiltInRegistries.RECIPE_SERIALIZER.get(ResourceLocation.parse(expectedData.get("type").getAsString()));
+            if(serializer==null)throw new IOException("未知的配方序列化器："+expectedData.get("type").getAsString());
+            com.mojang.serialization.Codec codec=serializer.codec().codec();var ops=Minecraft.getInstance().level.registryAccess().createSerializationContext(JsonOps.INSTANCE);
+            Object expected=codec.parse(ops,expectedData).getOrThrow(),loaded=codec.parse(ops,GenericFormatter.encodeRecipe(actual)).getOrThrow();
+            if(!codec.encodeStart(ops,expected).getOrThrow().equals(codec.encodeStart(ops,loaded).getOrThrow()))throw new IOException("配方内容与预期不同："+id+"\n预期："+codec.encodeStart(ops,expected).getOrThrow()+"\n实际："+codec.encodeStart(ops,loaded).getOrThrow());
+        }catch(IOException error){throw error;}catch(Exception error){throw new IOException("无法确认配方实际内容："+id+" · "+error.getMessage(),error);}
+    }
+    private static List<String> promote()throws IOException{
+        List<String> notes=verifyActivation();var next=WorkspaceState.copy(state,WorkspaceState.class);EditorProject remaining=WorkspaceState.copy(project,EditorProject.class);next.promote(remaining);
         Path b=backup();FileTransaction.commitMetadata(root(),b,Map.of(WorkspaceState.FILE,WorkspaceState.bytes(next),ProjectStore.FILE,WorkspaceState.bytes(remaining)));
         state=next;copyPending(remaining);activationError="";CreateConfigs.clear();CreateConfigs.restore(project);
+        return notes;
     }
     public static void pollActivation(){
         if(project==null||busy()||!canApply()||state.activation==null||System.currentTimeMillis()-lastPoll<2000)return;
@@ -401,7 +441,11 @@ public final class EditorRuntime {
         var a=state.activation;
         boolean restarted=a.boot!=java.lang.management.ManagementFactory.getRuntimeMXBean().getStartTime();
         boolean loaded=restarted?ScriptIndex.completedGeneration>0&&ScriptIndex.clientGeneration>0:!a.restart&&ScriptIndex.completedGeneration>a.serverGeneration&&(!a.client||ScriptIndex.clientGeneration>a.clientGeneration);
-        if(loaded)try{promote();}catch(Exception error){activationError=error.getMessage();}
+        if(loaded)try{promote();}catch(Exception error){
+            activationError=error.getMessage();
+            var diagnostic=new EditorDiagnostics.Diagnostic();diagnostic.operation="activation";diagnostic.phase="poll";diagnostic.outcome="failure";diagnostic.message=error.getMessage();
+            diagnostic.error=EditorDiagnostics.Error.of(error);diagnostic.throwable=error;fillActivationDiagnostic(diagnostic);EditorDiagnostics.record(root(),diagnostic);
+        }
     }
     public static String logs(){
         StringBuilder b=new StringBuilder();for(String file:List.of("startup.log","server.log","client.log"))try{
@@ -417,19 +461,156 @@ public final class EditorRuntime {
         if(requiresRestart())throw new IOException("存在尚未生效的启动期或配置更改，请重启游戏");
         Minecraft mc=Minecraft.getInstance();var server=mc.getSingleplayerServer();applying=true;
         long generation=ScriptIndex.serverGeneration;
-        server.execute(()->server.reloadResources(server.getPackRepository().getSelectedIds()).whenComplete((v,error)->mc.execute(()->{
+        var diagnostic=new EditorDiagnostics.Diagnostic();
+        diagnostic.operation="reload";diagnostic.phase="server-reload";diagnostic.generations.before=generation;
+        server.execute(()->{
             try{
-                if(error!=null)throw new IOException("配方重载失败",error);
-                if(ScriptIndex.serverGeneration<=generation)throw new IOException("未收到本次 KubeJS 加载结果");
-                if(!ScriptIndex.errors(dev.latvian.mods.kubejs.script.ConsoleJS.SERVER).isEmpty())throw new IOException(String.join("\n",ScriptIndex.errors(dev.latvian.mods.kubejs.script.ConsoleJS.SERVER)));
-                if(state().activation!=null&&state.activation.client)dev.latvian.mods.kubejs.client.KubeJSClient.reloadClientScripts();
-                java.util.concurrent.CompletableFuture<Void> refresh=resources?mc.reloadResourcePacks():java.util.concurrent.CompletableFuture.completedFuture(null);
-                refresh.whenComplete((ignored,failure)->mc.execute(()->{
-                    try{if(failure!=null)throw new IOException("资源刷新失败",failure);boolean activated=state.activation!=null,revoked=activated&&state.activation.revokedRecipes!=null&&!state.activation.revokedRecipes.isEmpty();if(activated)promote();result.accept(new ReloadResult(true,revoked?"已撤销此条修改并重载，其他待办保留":activated?"应用成功 · 操作记录已清空":"重载成功"));}
-                    catch(Exception e){activationError=e.getMessage();result.accept(new ReloadResult(false,"重载失败："+e.getMessage()+" · 草稿保留，可回滚"));}
-                    finally{applying=false;}
+                server.reloadResources(server.getPackRepository().getSelectedIds()).whenComplete((v,error)->mc.execute(()->{
+                    diagnostic.generations.after=ScriptIndex.serverGeneration;
+                    if(error!=null){completeFailedReload(server,error,generation,resources,diagnostic,result);return;}
+                    completeNormalReload(mc,resources,generation,diagnostic,result);
                 }));
-            }catch(Exception e){activationError=e.getMessage();applying=false;result.accept(new ReloadResult(false,"重载失败："+e.getMessage()+" · 草稿保留，可回滚"));}
-        })));
+            }catch(Throwable failure){
+                mc.execute(()->failReload(diagnostic,"无法开始配方重载："+shortError(failure),failure,result));
+            }
+        });
+    }
+    private static void completeNormalReload(Minecraft mc,boolean resources,long generation,EditorDiagnostics.Diagnostic diagnostic,java.util.function.Consumer<ReloadResult> result){
+        try{
+            if(ScriptIndex.serverGeneration<=generation)throw new IOException("未收到本次 KubeJS 加载结果");
+            List<String> errors=ScriptIndex.errors(dev.latvian.mods.kubejs.script.ConsoleJS.SERVER);
+            diagnostic.kubeJsErrors.addAll(errors);
+            if(!errors.isEmpty())throw new IOException(String.join("\n",errors));
+            if(state().activation!=null&&state().activation.client)dev.latvian.mods.kubejs.client.KubeJSClient.reloadClientScripts();
+            java.util.concurrent.CompletableFuture<Void> refresh=resources?mc.reloadResourcePacks():java.util.concurrent.CompletableFuture.completedFuture(null);
+            refresh.whenComplete((ignored,failure)->mc.execute(()->{
+                if(failure!=null){failReload(diagnostic,"资源刷新失败："+failure.getMessage(),failure,result);return;}
+                try{
+                    boolean activated=state().activation!=null;
+                    boolean revoked=activated&&state().activation.revokedRecipes!=null&&!state().activation.revokedRecipes.isEmpty();
+                    fillActivationDiagnostic(diagnostic);
+                    if(activated)diagnostic.notes.addAll(promote());
+                    diagnostic.phase="complete";diagnostic.outcome="success";diagnostic.promoted=activated;diagnostic.verification.passed=true;
+                    diagnostic.message=revoked?"已撤销此条修改并重载，其他待办保留":activated?"应用成功 · 操作记录已清空":"重载成功";
+                    EditorDiagnostics.record(root(),diagnostic);
+                    applying=false;
+                    result.accept(new ReloadResult(true,diagnostic.message));
+                }catch(Exception e){failReload(diagnostic,e.getMessage(),e,result);}
+            }));
+        }catch(Exception e){failReload(diagnostic,e.getMessage(),e,result);}
+    }
+    private static void completeFailedReload(net.minecraft.server.MinecraftServer server,Throwable error,long generation,boolean resources,EditorDiagnostics.Diagnostic diagnostic,java.util.function.Consumer<ReloadResult> result){
+        diagnostic.phase="reload-future";diagnostic.error=EditorDiagnostics.Error.of(error);diagnostic.throwable=error;
+        diagnostic.kubeJsErrors.addAll(ScriptIndex.errors(dev.latvian.mods.kubejs.script.ConsoleJS.SERVER));
+        if(ScriptIndex.serverGeneration<=generation){failReload(diagnostic,"本次 KubeJS 加载未完成："+shortError(error),error,result);return;}
+        if(!isDatapackSyncFailure(error)){failReload(diagnostic,"配方重载失败："+shortError(error),error,result);return;}
+        // The OnDatapackSyncEvent listener failed before PlayerList sent the recipe/tag packets.
+        // Verify the authoritative server state first; never compensate over a bad editor result.
+        try{
+            List<String> notes=verifyActivation();
+            diagnostic.verification.passed=true;diagnostic.verification.detail="通过";
+            diagnostic.notes.addAll(notes);
+        }catch(Exception verify){
+            diagnostic.verification.passed=false;diagnostic.verification.detail=verify.getMessage();
+            failReload(diagnostic,"重载被第三方同步监听中断，且目标状态核对失败："+verify.getMessage()+"（重载异常："+shortError(error)+"）",error,result);
+            return;
+        }
+        diagnostic.compensation.attempted=true;
+        Minecraft mc=Minecraft.getInstance();
+        try{
+            server.execute(()->{
+                try{
+                    syncLocalPlayers(server,diagnostic.compensation);
+                    mc.execute(()->{
+                        diagnostic.notes.add("OnDatapackSyncEvent 第三方监听器异常；已补发标签、配方和配方书；其他同步监听器未重放");
+                        diagnostic.outcome="compensated-success";diagnostic.phase="compensated";
+                        completeCompensatedReload(resources,diagnostic,result);
+                    });
+                }catch(Exception send){
+                    mc.execute(()->{
+                        diagnostic.compensation.error=send.getMessage();
+                        failReload(diagnostic,"第三方同步中断后补偿客户端配方/标签失败："+send.getMessage(),send,result);
+                    });
+                }
+            });
+        }catch(Throwable failure){
+            failReload(diagnostic,"无法开始客户端补偿同步："+shortError(failure),failure,result);
+        }
+    }
+    private static void completeCompensatedReload(boolean resources,EditorDiagnostics.Diagnostic diagnostic,java.util.function.Consumer<ReloadResult> result){
+        Minecraft mc=Minecraft.getInstance();
+        java.util.concurrent.CompletableFuture<Void> refresh=resources?mc.reloadResourcePacks():java.util.concurrent.CompletableFuture.completedFuture(null);
+        refresh.whenComplete((ignored,failure)->mc.execute(()->{
+            if(failure!=null){failReload(diagnostic,"资源刷新失败："+failure.getMessage(),failure,result);return;}
+            try{
+                boolean activated=state().activation!=null;
+                boolean revoked=activated&&state().activation.revokedRecipes!=null&&!state().activation.revokedRecipes.isEmpty();
+                fillActivationDiagnostic(diagnostic);
+                if(activated)diagnostic.notes.addAll(promote());
+                diagnostic.promoted=activated;
+                diagnostic.message=revoked?"已撤销此条修改并补偿客户端同步":activated?"已应用修改并补偿客户端同步":"已重载并补偿客户端同步";
+                EditorDiagnostics.record(root(),diagnostic);
+                applying=false;
+                result.accept(new ReloadResult(true,diagnostic.message+"；包内第三方同步异常已记录，建议重启核查其他数据包内容"));
+            }catch(Exception e){failReload(diagnostic,e.getMessage(),e,result);}
+        }));
+    }
+    private static void failReload(EditorDiagnostics.Diagnostic diagnostic,String message,Throwable error,java.util.function.Consumer<ReloadResult> result){
+        diagnostic.outcome="failure";diagnostic.message=message==null?"重载失败":message;
+        if(diagnostic.error==null&&error!=null)diagnostic.error=EditorDiagnostics.Error.of(error);
+        if(diagnostic.throwable==null)diagnostic.throwable=error;
+        fillActivationDiagnostic(diagnostic);
+        EditorDiagnostics.record(root(),diagnostic);
+        activationError=diagnostic.message;
+        applying=false;
+        result.accept(new ReloadResult(false,"重载失败："+diagnostic.message+" · 草稿保留，可回滚（更多 → 最近诊断）"));
+    }
+    /** PlayerList.reloadResources posts OnDatapackSyncEvent before sending recipes/tags. */
+    private static boolean isDatapackSyncFailure(Throwable error){
+        return stackMentions(error,new HashSet<>(),"net.minecraft.server.players.PlayerList","reloadResources")
+                ||stackMentions(error,new HashSet<>(),"net.neoforged.neoforge.event.OnDatapackSyncEvent",null);
+    }
+    private static boolean stackMentions(Throwable error,Set<Throwable> seen,String className,String method){
+        if(error==null||!seen.add(error))return false;
+        for(StackTraceElement frame:error.getStackTrace())if(frame.getClassName().equals(className)&&(method==null||frame.getMethodName().equals(method)))return true;
+        for(Throwable suppressed:error.getSuppressed())if(stackMentions(suppressed,seen,className,method))return true;
+        return stackMentions(error.getCause(),seen,className,method);
+    }
+    /**
+     * Replay exactly the packets that PlayerList.reloadResources would have sent after the
+     * failing event. Other datapack-sync listeners cannot be replayed safely; the diagnostic
+     * and UI say so, and a restart remains the only full synchronization.
+     */
+    private static void syncLocalPlayers(net.minecraft.server.MinecraftServer server,EditorDiagnostics.Compensation compensation)throws IOException{
+        if(server==null)throw new IOException("本机服务端不存在");
+        List<ServerPlayer> players=server.getPlayerList().getPlayers();
+        if(players.isEmpty())throw new IOException("没有可同步的本机玩家");
+        ClientboundUpdateTagsPacket tags=new ClientboundUpdateTagsPacket(TagNetworkSerialization.serializeTagsToNetwork(server.registries()));
+        ClientboundUpdateRecipesPacket recipes=new ClientboundUpdateRecipesPacket(server.getRecipeManager().getOrderedRecipes());
+        for(ServerPlayer player:players){
+            player.connection.send(tags);compensation.tagsSent=true;
+            player.connection.send(recipes);compensation.recipesSent=true;
+            player.getRecipeBook().sendInitialRecipeBook(player);
+        }
+        compensation.players=players.size();
+    }
+    private static void fillActivationDiagnostic(EditorDiagnostics.Diagnostic diagnostic){
+        var activation=state==null?null:state.activation;
+        if(activation==null)return;
+        LinkedHashSet<String> ids=new LinkedHashSet<>(),types=new LinkedHashSet<>();
+        if(activation.revokedRecipes!=null)ids.addAll(activation.revokedRecipes);
+        if(activation.desired!=null){
+            ids.addAll(activation.desired.recipes.keySet());
+            for(var recipe:activation.desired.recipes.values())if(recipe.data!=null&&recipe.data.has("type"))types.add(recipe.data.get("type").getAsString());
+        }
+        diagnostic.recipeIds=new ArrayList<>(ids);diagnostic.serializers=new ArrayList<>(types);
+        if(lastBackup!=null)try{diagnostic.backup=root().relativize(lastBackup).toString().replace('\\','/');}catch(Exception ignored){diagnostic.backup=lastBackup.toString();}
+    }
+    private static String shortError(Throwable error){
+        if(error==null)return "未知错误";
+        Throwable root=error;
+        while(root.getCause()!=null&&root.getCause()!=root)root=root.getCause();
+        String message=root.getMessage();
+        return root.getClass().getSimpleName()+(message==null||message.isBlank()?"":": "+message);
     }
 }

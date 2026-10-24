@@ -1,6 +1,6 @@
 # KubeJS Editor
 
-An in-game KubeJS editor for Minecraft **1.21.1 / NeoForge**, focused on vanilla and Create recipes, item registration and reversible modpack changes. Version **0.12.0**.
+An in-game KubeJS editor for Minecraft **1.21.1 / NeoForge**, focused on vanilla and Create recipes, item registration and reversible modpack changes. Version **0.12.1**.
 
 Required: Java 21, NeoForge 21.1.251+ within the 21.1 series, KubeJS 2101.7.2-build.368+ (and Rhino), and JEI 19.27.0.335+ within the 19 series. Create 6.0.10 is optional. Other Minecraft versions and loaders need separate ports; this Jar is not a universal build. Tested combinations and declared dependency ranges are listed separately in the compatibility report.
 
@@ -32,4 +32,4 @@ Build with JDK 21 using `bash ./gradlew build` (Linux/macOS) or `./gradlew.bat b
 
 Based on Astronomy20's MIT-licensed [KubeJS Recipe Editor](https://github.com/Astronomy20/KubeJS-Recipe-Editor). [ViScriptRecipe](https://github.com/zhenshiz/ViScriptRecipe) inspired interaction design. See [LICENSE](LICENSE), [NOTICE](NOTICE.md), [template documentation](docs/TEMPLATES.md), and [verification report](docs/verification.json).
 
-Crop and storage registration: [REGISTRATION.md](docs/REGISTRATION.md). Storage supports 1–9 rows, 1–12 columns and a capacity of 1–4096 per slot (default 3×9 and 64). Stackable items can exceed their normal limit inside storage; extracted stacks remain legal. Storage scripts require KubeJS Editor at runtime. Experimental simple recipe discovery is available in the last top navigation tab and is off by default: [guide](docs/SIMPLE_RECIPES.md). Unknown serializers must expose supported native JSON; ambiguous JEI displays stay read-only.
+Crop and storage registration: [REGISTRATION.md](docs/REGISTRATION.md). Storage supports 1–9 rows, 1–12 columns and a capacity of 1–4096 per slot (default 3×9 and 64). Stackable items can exceed their normal limit inside storage; extracted stacks remain legal. Storage scripts require KubeJS Editor at runtime. Experimental simple recipe discovery is available in the last top navigation tab and is off by default: [guide](docs/SIMPLE_RECIPES.md). Unknown serializers must expose supported native JSON; ambiguous JEI displays stay read-only. Version 0.12.1 compensates a local reload that is aborted by an unrelated third-party `OnDatapackSyncEvent` listener, verifies that revoked recipes really disappeared or were restored, and stores the latest failure in `kubejs/config/kubejs_editor/last-diagnostic.json` for “More → latest diagnostic”.

@@ -8,9 +8,14 @@ $instance=[IO.Path]::GetFullPath($InstancePath)
 $mods=Join-Path $instance 'mods'
 if(!(Test-Path -LiteralPath $mods -PathType Container)){throw "找不到实例 mods 目录：$mods"}
 $release=[IO.Path]::GetFullPath($ReleaseDir)
-$name='kubejs-editor-0.12.0.jar'
+$sumsFile=Join-Path $release 'SHA256SUMS.txt'
+if(!(Test-Path -LiteralPath $sumsFile)){throw "找不到发布校验文件：$sumsFile"}
+$sumLine=@(Get-Content -LiteralPath $sumsFile | Where-Object {$_ -match '\s+kubejs-editor-[0-9][^\s]*\.jar$' -and $_ -notmatch '-sources\.jar$'}) | Select-Object -First 1
+if(!$sumLine){throw '发布目录中没有 kubejs-editor 主 Jar'}
+$parts=$sumLine -split '\s+'
+$expected=$parts[0]
+$name=$parts[-1]
 $source=Join-Path $release $name
-$expected=((Get-Content -LiteralPath (Join-Path $release 'SHA256SUMS.txt') | Where-Object {$_ -match ('\s'+[regex]::Escape($name)+'$')}) -split '\s+')[0]
 if(!$expected -or (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne $expected){throw '发布 Jar 校验失败'}
 function Assert-GameClosed {
     $running=@(Get-CimInstance Win32_Process -Filter "Name='java.exe' OR Name='javaw.exe'" | Where-Object {$_.CommandLine -and ($_.CommandLine.IndexOf($instance,[StringComparison]::OrdinalIgnoreCase) -ge 0 -or ($_.CommandLine -match 'net\.minecraft\.client\.main\.Main' -and $_.CommandLine -notmatch '--gameDir[ =]'))})

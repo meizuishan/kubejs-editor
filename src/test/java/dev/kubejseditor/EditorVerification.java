@@ -3,6 +3,7 @@ package dev.kubejseditor;
 import com.google.gson.*;
 import dev.kubejseditor.model.EditorProject;
 import dev.kubejseditor.recipe.*;
+import dev.kubejseditor.runtime.EditorDiagnostics;
 import dev.kubejseditor.script.KjsGenerator;
 import dev.kubejseditor.storage.*;
 import dev.latvian.mods.rhino.*;
@@ -72,6 +73,7 @@ public final class EditorVerification {
         Files.writeString(fixtures.resolve("expected-recipe-ids.json"),ProjectStore.JSON.toJson(project.recipes.keySet()));
         verifyWorkspace(root);
         verifyOperations(root);
+        verifyDiagnostics(root);
         verifyCanvas();
         verifyRegistrationKinds();
         verifyItemRemovalAndInspection(root);
@@ -222,6 +224,32 @@ public final class EditorVerification {
         changed.origin="add";check(changed.actionLabel().equals("新增"),"An edited newly created ID retains its creation label");changed.origin="existing";check(changed.actionLabel().equals("已替换"),"Imported replacement label");changed.operation="remove";check(changed.actionLabel().equals("已禁用"),"Disabled recipe label");
         revokeState.frozen.computeIfAbsent(WorkspaceState.GENERATED.getFirst(),k->new LinkedHashSet<>()).add(keep.id);fails(()->revokeState.withoutRecipe(keep.id),"Revocation cannot silently rewrite handwritten source");
     }
+    private static void verifyDiagnostics(Path root)throws Exception{
+        var draft=new EditorProject.RecipeDraft("kubejs_editor:source_test",RecipeAdapters.parse("{type:'minecraft:crafting_shapeless',ingredients:[{item:'minecraft:diamond'}],result:{id:'minecraft:emerald'}}"));
+        draft.source=RecipeAdapters.parse("{type:'minecraft:crafting_shapeless',ingredients:[{item:'minecraft:coal'}],result:{id:'minecraft:emerald'}}");
+        var copy=draft.copy("kubejs_editor:source_copy");
+        check(copy.source!=null&&copy.source.getAsJsonArray("ingredients").get(0).getAsJsonObject().get("item").getAsString().equals("minecraft:coal"),"Recipe source snapshots survive copy");
+        check(!copy.source.has("simple")&&!copy.source.has("origin"),"Source snapshots do not acquire authoring metadata");
+        Path file=root.resolve(EditorDiagnostics.FILE);
+        var failure=new EditorDiagnostics.Diagnostic();failure.operation="revokeRecipe";failure.phase="reload-future";failure.outcome="failure";failure.message="第三方同步监听异常";failure.error=EditorDiagnostics.Error.of(new NullPointerException("Data resource not present: null"));failure.throwable=new NullPointerException("Data resource not present: null");
+        EditorDiagnostics.record(root,failure);
+        check(Files.exists(file),"Failure diagnostics are persisted");
+        var parsed=ProjectStore.JSON.fromJson(Files.readString(file),EditorDiagnostics.Diagnostic.class);
+        check("failure".equals(parsed.outcome)&&parsed.error!=null&&parsed.error.type.endsWith("NullPointerException")&&!parsed.error.stack.isEmpty(),"Persisted diagnostics retain the original failure");
+        var success=new EditorDiagnostics.Diagnostic();success.operation="reload";success.phase="complete";success.outcome="success";success.message="重载成功";
+        EditorDiagnostics.record(root,success);
+        parsed=ProjectStore.JSON.fromJson(Files.readString(file),EditorDiagnostics.Diagnostic.class);
+        check("failure".equals(parsed.outcome),"A later plain success preserves the last failure diagnostic");
+        var compensated=new EditorDiagnostics.Diagnostic();compensated.operation="revokeRecipe";compensated.phase="compensated";compensated.outcome="compensated-success";compensated.message="已补偿客户端同步";compensated.error=EditorDiagnostics.Error.of(new RuntimeException("sync listener"));
+        EditorDiagnostics.record(root,compensated);
+        parsed=ProjectStore.JSON.fromJson(Files.readString(file),EditorDiagnostics.Diagnostic.class);
+        check("compensated-success".equals(parsed.outcome),"Compensated success records the bypass evidence");
+        check(EditorDiagnostics.read(root).contains("compensated-success")&&EditorDiagnostics.path(root).endsWith("last-diagnostic.json"),"Diagnostics can be read by the UI");
+        Throwable deep=deepFailure();
+        check(EditorDiagnostics.Error.of(deep).stack.size()<=40,"Persisted stack traces are bounded");
+    }
+    private static Throwable deepFailure(){try{deepFailure(0);}catch(Throwable error){return error;}return new IllegalStateException("unreachable");}
+    private static void deepFailure(int depth){if(depth>80)throw new IllegalStateException("deep");deepFailure(depth+1);}
     public static EditorProject fixtures(){
         EditorProject project=new EditorProject();int i=0;
         for(var adapter:RecipeAdapters.all()){
