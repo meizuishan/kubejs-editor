@@ -1,0 +1,28 @@
+package dev.kubejseditor;
+
+import com.google.gson.*;
+import dev.kubejseditor.recipe.*;
+import dev.kubejseditor.model.EditorProject;
+import dev.kubejseditor.script.KjsGenerator;
+import java.util.*;
+
+public final class SimpleRecipeVerification {
+    private static int checks;
+    private static void check(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
+    private static void rejected(Runnable action,String message){checks++;try{action.run();}catch(IllegalArgumentException expected){return;}throw new AssertionError(message);}
+    public static int run(){
+        var data=RecipeAdapters.parse("{type:'sample:energizing',ingredients:[{tag:'c:gems/diamond'}],result:{id:'minecraft:iron_ingot',count:2},energy:300000,meta:{preserve:'yes'}}");var adapter=new SimpleRecipeAdapter(data);var original=data.deepCopy();var slots=adapter.slots(data);
+        check(slots.size()==2,"Singular result and plural ingredients map");slots.getFirst().set(RecipeAdapters.parse("{item:'minecraft:gold_ingot'}"));slots.getLast().set(RecipeAdapters.parse("{id:'minecraft:diamond',count:3}"));check(data.getAsJsonObject("meta").equals(original.getAsJsonObject("meta"))&&data.get("energy").getAsInt()==300000,"Unknown fields and energy preserved");adapter.verifyRoundTrip(data,data.deepCopy());checks++;
+        var crushing=RecipeAdapters.parse("{type:'sample:crushing',ingredient:{item:'minecraft:stone'},result:[{result:{id:'minecraft:cobblestone',count:2},chance:0.5,preserve:42}]}");var crush=new SimpleRecipeAdapter(crushing);var result=crush.slots(crushing).getLast();result.set(RecipeAdapters.parse("{id:'minecraft:gravel',count:4,chance:0.25}"));var outer=crushing.getAsJsonArray("result").get(0).getAsJsonObject();check(outer.getAsJsonObject("result").get("id").getAsString().equals("minecraft:gravel")&&outer.get("chance").getAsDouble()==.25&&outer.get("preserve").getAsInt()==42,"Wrapped output preserves format, chance and metadata");
+        var counted=RecipeAdapters.parse("{type:'sample:counted',input:{ingredient:{tag:'c:ingots/iron'},amount:3},output:{id:'minecraft:iron_block'}}");var sized=new SimpleRecipeAdapter(counted);var input=sized.slots(counted).getFirst();check(input.get().getAsJsonObject().get("count").getAsInt()==3&&!input.fluid(),"Counted item ingredient remains an item");input.set(RecipeAdapters.parse("{item:'minecraft:copper_ingot',count:5}"));check(counted.getAsJsonObject("input").get("amount").getAsInt()==5&&counted.getAsJsonObject("input").getAsJsonObject("ingredient").has("item"),"Counted ingredient encodes original amount wrapper");
+        crushing.getAsJsonArray("result").add(RecipeAdapters.parse("{result:{},chance:0.0}"));check(crush.slots(crushing).size()==2,"Disabled optional native result is preserved without a fake output slot");crush.slots(crushing).getLast().set(RecipeAdapters.parse("{id:'minecraft:diamond',count:3,chance:0.75}"));check(crushing.getAsJsonArray("result").get(1).getAsJsonObject().getAsJsonObject("result").isEmpty(),"Editing leaves disabled result placeholder untouched");
+        var fluid=RecipeAdapters.parse("{type:'sample:fluid',input:{item:'minecraft:stone'},inputFluid:{fluid:'minecraft:water',amount:500},output:{id:'minecraft:clay_ball'}}");var wet=new SimpleRecipeAdapter(fluid);var liquid=wet.slots(fluid).stream().filter(RecipeCanvas.Slot::fluid).findFirst().orElseThrow();liquid.set(RecipeAdapters.parse("{fluid:'minecraft:lava',amount:250,type:'neoforge:single'}"));check(fluid.getAsJsonObject("inputFluid").get("amount").getAsInt()==250,"Fluid amount maps without rewriting the recipe");
+        var string=RecipeAdapters.parse("{type:'sample:text',input:'minecraft:stone',output:'minecraft:gravel'}");var text=new SimpleRecipeAdapter(string);text.slots(string).getFirst().set(RecipeAdapters.parse("{tag:'c:stones'}"));check(string.get("input").getAsString().equals("#c:stones"),"String identity format preserved");rejected(()->text.slots(string).getLast().set(RecipeAdapters.parse("{id:'minecraft:diamond',count:2}")),"String output cannot silently discard quantity");
+        rejected(()->slots.getFirst().set(JsonNull.INSTANCE),"Fixed slots cannot silently disappear");
+        for(String bad:List.of("{type:'sample:or',ingredient:[{item:'minecraft:stone'},{item:'minecraft:dirt'}],result:{id:'minecraft:gravel'}}","{type:'sample:custom',ingredient:{type:'other:complex',item:'minecraft:stone'},result:{id:'minecraft:gravel'}}","{type:'sample:conditional',ingredient:{item:'minecraft:stone'},result:{id:'minecraft:gravel'},'neoforge:conditions':[]}"))rejected(()->new SimpleRecipeAdapter(RecipeAdapters.parse(bad)),"Opaque structure must stay read-only");
+        var lost=data.deepCopy();lost.getAsJsonObject("result").addProperty("count",1);rejected(()->adapter.verifyRoundTrip(data,lost),"Native codec discarding quantity must be rejected");
+        var huge=data.deepCopy();huge.addProperty("energy",new java.math.BigInteger("9007199254740993"));var rounded=huge.deepCopy();rounded.addProperty("energy",new java.math.BigInteger("9007199254740992"));rejected(()->adapter.verifyRoundTrip(huge,rounded),"Large energy values compare exactly, not as rounded doubles");
+        var draft=new EditorProject.RecipeDraft("sample:authored",data);draft.simple=true;var project=new EditorProject();project.recipes.put(draft.id,draft);SimpleRecipes.clear();KjsGenerator.generate(project);check(RecipeAdapters.get("sample:energizing") instanceof SimpleRecipeAdapter,"Saved authoring metadata restores adapter without discovery enabled");check(draft.copy("sample:copy").simple,"Copy preserves simple recipe authoring annotation");SimpleRecipes.clear();
+        return checks;
+    }
+}

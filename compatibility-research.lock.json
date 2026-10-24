@@ -1,0 +1,26 @@
+[
+  {
+    "name": "enderio-8.2.12-beta.jar",
+    "sha256": "5fe098153dddc2e7ccd9d38b0341dbc61f3072150958c916e5ef63f395e4eab1"
+  },
+  {
+    "name": "enderio_evolution-3.1.5-NeoForge-1.21.1.jar",
+    "sha256": "f1af482dc6928a9d4c128549508454d9797fa6033a36d51907811a69a1f84fed"
+  },
+  {
+    "name": "enderio_conduit_opt-1.1.6-1.21.1.jar",
+    "sha256": "57ff2fb51e222b91465fa68ea5ea12c5438b615e6d08080e0023bb3caca4a454"
+  },
+  {
+    "name": "kubejs_enderio-neoforge-1.21.1-0.13.0.jar",
+    "sha256": "79b83fed693bb77440670af23749e13fc1c0fdae8771409044e8807f43d2e390"
+  },
+  {
+    "name": "allthemodium-3.1.1_mc_1.21.1.jar",
+    "sha256": "c0f80a7413496b1bd891b31595e35b7fce191c99eadc9dac38186a963aef7321"
+  },
+  {
+    "name": "geckolib-neoforge-1.21.1-4.9.2.jar",
+    "sha256": "5e548466af9ab6aca7a91a7c7d4dc0dc8bc385e22958aed5da0e7bebd0fa3fba"
+  }
+]

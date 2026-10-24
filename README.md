@@ -1,71 +1,35 @@
-# KubeJS Recipe Editor
+# KubeJS Editor
 
-Recipe builder with visual editing, tagging, and instant KubeJS export.
+Minecraft 1.21.1 / NeoForge 的游戏内 KubeJS 可视化编辑器，当前版本 **0.12.0**。
 
-## Requirements
-- KubeJS
-- JEI (bundled - installed automatically if not already present)
+进入世界后按 **K** 或执行 `/kubejseditor`（保留 `/kjseditor`）。顶部依次为新增功能、修改现有、机械动力、已有修改、强制兼容；实验功能集中在最后一栏。支持 JEI 拖放和准确配方 ID 的侧边编辑按钮。
 
-## Usage
+左侧操作记录自动保存，可逐条取消；点击 **一键应用** 提交全部待办，自动检查、备份、保存并按需重载。**查看代码**统一收纳代码、检查结果和文件差异，不必先进入预览页。新物品及启动期修改保存后在已有修改中等待重启验证。
 
-### Building a custom recipe
-1. Press **J** (configurable in Controls → KubeJS Recipe Editor) to open the recipe builder
-2. Select a mod namespace to expand its categories, then click a category
-3. Drag items from the JEI panel into the ingredient slots
-4. **Right-click** a filled slot to select a tag or adjust item count
-5. **Drag** items between slots to reorder
-6. Configure extra parameters (heat requirement, processing time, XP, etc.) with the **-/+** buttons
-7. Click **Export** to append the recipe to the output file
+新增配方中的 Create 及附属工作站统一进入 **机械动力** 子分类。编辑器注册的物品与方块支持确认删除；已注册内容保存后重启生效，不提交其他待办。存在配方或源码引用时先列出来源，避免遗留失效引用。
 
-### Fluid slots (modded recipes)
-- Drag a **fluid** from JEI onto a slot that accepts fluids (e.g. Create Mixing water input)
-- A blue `~` indicator appears to confirm fluid mode
-- **Right-click** the fluid slot to set the amount in millibuckets: type a value directly, or use **-/+** (100 mB steps, Ctrl = 10 mB, Shift = 1000 mB)
+“已有修改”显示 **已生效 + 新增 / 已禁用 / 已替换**。该页的 `×` 经游戏内确认后撤销配方规则并自动重载，不生成禁用待办；编辑页的 `×` 只取消尚未提交的操作。
 
-### Tags as ingredients
-- Right-click a filled slot and select a tag from the list
-- A `#` indicator appears on the slot
-- Output slots always use the specific item (tags not allowed on output)
+方块注册提供普通方块、台阶、楼梯、栅栏、栅栏门、墙、门、活板门、按钮、压力板、地毯和柱状方块，使用 KubeJS 原生类型。可设置声音、透明渲染、碰撞、工具要求、滑度、移动／跳跃倍率和原生交互方式；门独立管理上半、下半与背包图标。
 
-### Export All
-From the main screen, click **Export All** to export every loaded recipe to KubeJS format.
-A status message shows the result: `Exported N types, M recipes`.
+修复了公开配置把部分数值误判为 Object 的问题。隔离环境中 501 项配置通过类型解析及模组校验；最大转速与搅拌器应力的实际消费者已验证重启生效。覆盖范围与后续适配成本见 [配置核查](docs/CONFIGURATION.md)。
 
-## Output Paths
+工作台统一使用 3×3 网格，右侧切换有序／无序。机械动力使用 Create 设备立体预览及对应材料槽位；动力合成可选 1×1 至 9×9，生成时裁去外围空白。模组参数优先显示中文名称。注册先选择材料、食物、工具、武器、防具或方块，再填写该类数值。
 
-| Recipe type                      | Output file                                   |
-|----------------------------------|-----------------------------------------------|
-| Vanilla crafting, smelting, etc. | `kubejs/server_scripts/vanilla/<type>.js`     |
-| Modded recipes                   | `kubejs/server_scripts/<namespace>/<type>.js` |
-| Fuel (burn time)                 | `kubejs/startup_scripts/fuel.js`              |
+普通配方居中并按可用空间放大；序列组装使用较小卡片，同屏约显示 2.5 个步骤，通过顶部滚动条查看长序列，步骤增加不再缩小卡片。现有配方列表与编辑页均提供直接的“禁用配方”按钮，加入待办后统一应用。水洗、缠魂与龙+冷冻／终结／喷砂合并到“鼓风机加工”；不适配染色。工作盆提供无燃烧（默认）、普通燃烧、超级燃烧三档条件。
 
-## Tag Editor
+- [使用说明](docs/GUIDE.md)：操作记录、配方、源码编辑、应用与恢复。
+- [开发与验证](docs/DEVELOPMENT.md)：依赖、构建与隔离验证。
+- [新对话交接](HANDOFF.md)：当前版本、已完成事项、未做范围和继续开发入口。
+- [发布准备与兼容性](docs/PUBLISHING.md)：版本边界、项目对比和 CurseForge 准备。
+- [Vintage 适配与汉化](docs/VINTAGE.md)：13 类固定加工、动态入口及版本边界。
+- [JSON 配方模板](docs/TEMPLATES.md)：槽位上限、参数和附属适配示例。
+- [English](README.en.md)：英文安装、使用和构建说明。
+- [来源与许可](NOTICE.md)：Astronomy20 的 MIT 工程与 ViScriptRecipe 交互参考。
+- `examples/`：不会自动执行的独立示例。
 
-Click **Tags** in the main screen to open the tag editor.
-- Browse and edit item, block, and fluid tags
-- Create new tags or add/remove entries
-- Output: `kubejs/data/<pack>/tags/<type>/<tag_name>.json`
+产物：`build/libs/kubejs-editor-0.12.0.jar`。默认开发依赖锁定 JEI 19.69.0.457、Create 6.0.10；运行支持 JEI 19.27.0.335 起的 19 系列，具体实测组合见兼容性报告。航空学 1.3.2 等兼容快照用于隔离验证，不随发布包分发。当前 Jar 不适用于 Forge、Fabric 或其他 Minecraft 版本。
 
-## Recipe Browser
+支持当前槽位的物品/流体搜索和标签候选、点击错误定位字段、拖动三栏分隔线并保存宽度，以及通过 JSON 扩展常见加工类型。Create 是可选依赖；缺失模组的旧草稿保留并显示原因。源码可直接从公开仓库解析固定依赖构建，不需要本机 libs。常用按钮和表单已提供中英文资源，详细诊断和部分动态文本仍为中文。
 
-Click **Browse** in the main screen to browse loaded KubeJS script files.
-Quickly locate and remove previously exported recipes.
-
-## Cache
-
-Template data (slot layout, extra parameters) is cached in `config/kubejsrecipeeditor_cache.json`.
-The cache is automatically invalidated when:
-- The mod version changes
-- The installed mod list changes (any mod added, removed, or updated)
-
-To force manual regeneration: run the command `/kre regenerate_cache`.
-
----
-
-## Adding support for new recipe types
-
-To add or improve GUI support for a recipe type (slot colours, optional fields,
-enum values, fluid/chemical inputs), write a **fragment schema** JSON file.
-
-See **[RECIPE_SCHEMA_GUIDE.md](RECIPE_SCHEMA_GUIDE.md)** for the full format
-reference and worked examples covering Create, Mekanism, AE2, Farmers Delight, and more.
+作物及存储注册见 [操作说明](docs/REGISTRATION.md)：存储支持 1～9 行、1～12 列、单格 1～4096，默认 3×9、64/格。0.12.0 提供默认关闭的[简单配方强制兼容实验模式](docs/SIMPLE_RECIPES.md)，可编辑符合条件的未知机器配方，保留 JEI 19.27 下限。NeoForge 最低版本调整为 21.1.251。

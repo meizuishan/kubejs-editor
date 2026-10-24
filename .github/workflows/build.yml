@@ -1,25 +1,37 @@
-name: Build
-
-on: [push, pull_request]
-
+name: Build and verify
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Setup JDK 21
-        uses: actions/setup-java@v4
+          persist-credentials: false
+      - uses: actions/setup-java@v6
         with:
+          distribution: temurin
           java-version: '21'
-          distribution: 'temurin'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build with Gradle
-        run: ./gradlew build
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+      - name: Build from public dependencies
+        shell: bash
+        run: bash ./gradlew build compileIntegrationJava --no-daemon --console=plain
+      - name: Verify empty-workspace migration and installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/Test-Migration.ps1
+          ./scripts/Test-Installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubejs-editor-${{ matrix.os }}
+          path: |
+            build/libs/kubejs-editor-*.jar
+            build/dependencies-resolved.json
+          if-no-files-found: error

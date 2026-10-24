@@ -45,7 +45,6 @@ import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.*;
 
-@JeiPlugin
 public class JeiIntegration implements IModPlugin {
     @Nullable
     private static IJeiRuntime jeiRuntime;

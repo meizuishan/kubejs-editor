@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KubeJS Editor processing template v1",
+  "type": "object",
+  "required": ["schemaVersion", "type", "title", "limits", "defaults"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "type": {"type": "string", "pattern": "^[a-z0-9_.-]+:[a-z0-9_./-]+$"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "requires": {"type": "object", "additionalProperties": {"type": "string"}},
+    "inputLabel": {"type": "string"},
+    "outputLabel": {"type": "string"},
+    "limits": {
+      "type": "object",
+      "properties": {
+        "inputs": {"$ref": "#/$defs/limit"},
+        "outputs": {"$ref": "#/$defs/limit"},
+        "fluidInputs": {"$ref": "#/$defs/limit"},
+        "fluidOutputs": {"$ref": "#/$defs/limit"}
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "required": ["ingredients", "results"],
+      "properties": {
+        "ingredients": {"type": "array"},
+        "results": {"type": "array"}
+      },
+      "not": {"anyOf": [{"required": ["pattern"]}, {"required": ["sequence"]}]}
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "kind"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "not": {"enum": ["type", "ingredients", "results"]}},
+          "label": {"type": "string"},
+          "kind": {"enum": ["integer", "number", "boolean", "string"]},
+          "default": {"type": ["number", "boolean", "string"]},
+          "min": {"type": "number"},
+          "max": {"type": "number"},
+          "unit": {"type": "string"},
+          "values": {"type": "array", "minItems": 1, "items": {"type": ["number", "boolean", "string"]}}
+        }
+      }
+    }
+  },
+  "$defs": {"limit": {"type": "integer", "minimum": 0, "maximum": 64}}
+}

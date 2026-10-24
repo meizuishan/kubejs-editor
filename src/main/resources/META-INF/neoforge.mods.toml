@@ -1,0 +1,41 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="kubejs_editor"
+version="${mod_version}"
+displayName="KubeJS Editor"
+logoFile="icon.png"
+displayTest="IGNORE_SERVER_VERSION"
+authors="KubeJS Editor contributors; based on Astronomy20's KubeJS Recipe Editor"
+description='''Visual KubeJS authoring: recipes, items and Create configuration with review and rollback.'''
+[[dependencies.kubejs_editor]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.251,21.2)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.kubejs_editor]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"
+[[dependencies.kubejs_editor]]
+modId="kubejs"
+type="required"
+versionRange="[2101.7.2-build.368,)"
+ordering="AFTER"
+side="BOTH"
+[[dependencies.kubejs_editor]]
+modId="jei"
+type="required"
+versionRange="[${jei_min_version},20)"
+ordering="AFTER"
+side="CLIENT"
+[[dependencies.kubejs_editor]]
+modId="create"
+type="optional"
+versionRange="[6.0.10,6.1)"
+ordering="AFTER"
+side="BOTH"

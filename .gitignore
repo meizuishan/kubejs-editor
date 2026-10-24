@@ -38,3 +38,11 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+libs/
+run-client/
+run-server/
+run-gametest/
+
+run-v2/
+run-v*/

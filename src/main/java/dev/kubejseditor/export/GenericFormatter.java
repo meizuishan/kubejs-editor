@@ -1,4 +1,4 @@
-package net.astronomy.kubejsrecipeeditor.export;
+package dev.kubejseditor.export;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -11,7 +11,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeSerializer;
-import net.astronomy.kubejsrecipeeditor.KubeJsRecipeEditor;
+import dev.kubejseditor.KubeJsRecipeEditor;
 
 public class GenericFormatter {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -37,7 +37,7 @@ public class GenericFormatter {
 
     public static JsonElement encodeRecipe(RecipeHolder<?> holder) {
         RegistryOps<JsonElement> ops = RegistryOps.create(
-                JsonOps.INSTANCE, Minecraft.getInstance().level.registryAccess());
+                JsonOps.INSTANCE, Minecraft.getInstance().hasSingleplayerServer()?Minecraft.getInstance().getSingleplayerServer().registryAccess():Minecraft.getInstance().level.registryAccess());
         return encodeUnchecked(holder.value().getSerializer(), holder, ops);
     }
 

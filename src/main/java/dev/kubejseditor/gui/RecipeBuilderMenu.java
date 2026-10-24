@@ -1,11 +1,11 @@
-package net.astronomy.kubejsrecipeeditor.gui;
+package dev.kubejseditor.gui;
 
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.IContainerFactory;
-import net.astronomy.kubejsrecipeeditor.ModMenuTypes;
+import dev.kubejseditor.ModMenuTypes;
 
 public class RecipeBuilderMenu extends AbstractContainerMenu {
     public RecipeBuilderMenu(int containerId, Inventory playerInventory) {

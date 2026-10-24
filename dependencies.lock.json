@@ -1,0 +1,68 @@
+[
+  {
+    "target": "libs/addons/[机械动力：创想附加] createaddition-1.6.0.jar",
+    "sourceSuffix": "createaddition-1.6.0.jar",
+    "sha256": "41876C3780B70365A1848994D146A73423CC19FBE86485885795D9E7D855E7E9",
+    "coordinate": "maven.modrinth:createaddition:qPr8V4G2"
+  },
+  {
+    "target": "libs/addons/[机械动力：柴油动力] createdieselgenerators-1.21.1-1.3.14.jar",
+    "sourceSuffix": "createdieselgenerators-1.21.1-1.3.14.jar",
+    "sha256": "038D7F9173FE7F792B77054AB98E9543E04630825610A05B036329D30D02329C",
+    "coordinate": "maven.modrinth:create-diesel-generators:Kijd1iDy"
+  },
+  {
+    "target": "libs/addons/[机械动力：附魔工业] create-enchantment-industry-2.5.0-preview-alpha1.jar",
+    "sourceSuffix": "create-enchantment-industry-2.5.0-preview-alpha1.jar",
+    "sha256": "B25CC57696E6A26FEF16437D88F3FE5A2690090E6F9728B6C72CA3E945CB07EB",
+    "coordinate": "maven.modrinth:create-enchantment-industry:8XedJhwv"
+  },
+  {
+    "target": "libs/addons/[机械动力：龙+] CreateDragonsPlus-1.11.2b.jar",
+    "sourceSuffix": "CreateDragonsPlus-1.11.2b.jar",
+    "sha256": "9B15E464465A639DE9EF5A935AE9FD94EA545904517D1428BC784A4012E0A1E2",
+    "coordinate": "maven.modrinth:create-dragons-plus:lSnZyFnZ"
+  },
+  {
+    "target": "libs/create.jar",
+    "sourceSuffix": "create-1.21.1-6.0.10.jar",
+    "sha256": "EF87FE5709F1BA1F5B8BB20A2925B5AFB4669E178FD6D8BF10C167759EEFE37A",
+    "coordinate": "maven.modrinth:create:UjX6dr61"
+  },
+  {
+    "target": "libs/jei.jar",
+    "sourceSuffix": "jei-1.21.1-neoforge-19.69.0.457.jar",
+    "sha256": "5F09D199DBA1265E131EF1672597EA07857220E4CC2FF1DC754E8BD0E6378925",
+    "coordinate": "mezz.jei:jei-1.21.1-neoforge:19.69.0.457"
+  },
+  {
+    "target": "libs/kubejs-create.jar",
+    "sourceSuffix": "kubejs-create-neoforge-2101.3.1-build.18.jar",
+    "sha256": "9051FD08349850CB9B28845554246EF4F2C976892835A704EE27DCB7C8BFD7A1",
+    "coordinate": "dev.latvian.mods:kubejs-create-neoforge:2101.3.1-build.18",
+    "publicSha256": "A90D612510B8D83ED978CBCF10093EC368922DF7680A5B31FDC33165D7268633",
+    "publicArtifactNote": "Official Maven artifact differs only in META-INF/MANIFEST.MF; all other entry contents match the instance artifact."
+  },
+  {
+    "target": "libs/kubejs.jar",
+    "sourceSuffix": "kubejs-neoforge-2101.7.2-build.368.jar",
+    "sha256": "01767BB677A9C4A8F318717C4C21BCA7E7EF80995603403A551068A0E064E740",
+    "coordinate": "dev.latvian.mods:kubejs-neoforge:2101.7.2-build.368",
+    "publicSha256": "C33ECAC8E3E8E8508ABEBF7966C7A267943B1B12BD5D274AF17B8E3139314006",
+    "publicArtifactNote": "Official Maven artifact differs only in META-INF/MANIFEST.MF; all other entry contents match the instance artifact."
+  },
+  {
+    "target": "libs/rhino.jar",
+    "sourceSuffix": "rhino-2101.2.7-build.85.jar",
+    "sha256": "E0E9B0E78EDD380440266C0F4EA8D489DAC851EF075A4566A66A6DAE2F7BBB66",
+    "coordinate": "dev.latvian.mods:rhino:2101.2.7-build.85",
+    "publicSha256": "26B388FC1FD89D3512215A2DAC99397F34B9A37FAA140812E571A94080FC04D0",
+    "publicArtifactNote": "Official Maven artifact differs only in META-INF/MANIFEST.MF; all other entry contents match the instance artifact."
+  },
+  {
+    "target": "libs/addons/createvintageneoforged-1.21.1-1.3.7.jar",
+    "sourceSuffix": "createvintageneoforged-1.21.1-1.3.7.jar",
+    "sha256": "2EF3E8B9B7FCE7528DB3FEA5827FEB5917D1D5C33E27A0ACD4887D7C70849B5C",
+    "coordinate": "maven.modrinth:qVZh767G:lKygSXpY"
+  }
+]

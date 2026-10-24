@@ -1,0 +1,2 @@
+dev.kubejseditor.runtime.ScriptIndex
+dev.kubejseditor.content.EditorContentPlugin

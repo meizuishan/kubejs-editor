@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "type": "createaddition:rolling",
+  "title": "创想附加 · 轧制",
+  "requires": {"createaddition": "[1.6.0,1.7)"},
+  "inputLabel": "轧制原料",
+  "outputLabel": "轧制产物",
+  "limits": {"inputs": 1, "outputs": 1, "fluidInputs": 0, "fluidOutputs": 0},
+  "defaults": {
+    "ingredients": [{"item": "minecraft:iron_ingot"}],
+    "results": [{"id": "createaddition:iron_rod", "count": 2}]
+  },
+  "parameters": []
+}

@@ -1,0 +1,23 @@
+name: Bug report / 问题反馈
+description: Report a reproducible editor problem.
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Versions / 版本
+      description: Include Minecraft, loader, KubeJS Editor, KubeJS, JEI, Create and relevant addons.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and expected result / 复现步骤和预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Actual result and logs / 实际结果和日志
+      description: Include the affected recipe ID and compatibility report. Remove account details and tokens before sharing.
+    validations:
+      required: true

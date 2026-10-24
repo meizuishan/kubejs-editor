@@ -1,4 +1,4 @@
-package net.astronomy.kubejsrecipeeditor;
+package dev.kubejseditor;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -10,11 +10,12 @@ import org.lwjgl.glfw.GLFW;
 
 @EventBusSubscriber(modid = KubeJsRecipeEditor.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public class ClientSetup {
+    @SubscribeEvent public static void screens(net.neoforged.neoforge.client.event.RegisterMenuScreensEvent event){event.register(ModMenuTypes.STORAGE.get(),dev.kubejseditor.client.StorageScreen::new);}
     public static final KeyMapping OPEN_EXPORTER_KEY = new KeyMapping(
-            "key.kubejsrecipeeditor.open_editor",
+            "key.kubejs_editor.open",
             InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_J,
-            "key.categories.kubejsrecipeeditor"
+            GLFW.GLFW_KEY_K,
+            "key.categories.kubejs_editor"
     );
 
     @SubscribeEvent
