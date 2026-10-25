@@ -6,7 +6,12 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - {os: ubuntu-latest, neo: '21.1.199', jei: '19.25.0.322', profile: core, integration: false}
+          - {os: windows-latest, neo: '21.1.199', jei: '19.25.0.322', profile: core, integration: false}
+          - {os: ubuntu-latest, neo: '21.1.251', jei: '19.27.0.335', profile: core, integration: true}
+          - {os: ubuntu-latest, neo: '21.1.251', jei: '19.57.0.449', profile: core, integration: true}
+          - {os: windows-latest, neo: '21.1.265', jei: '19.69.0.457', profile: full, integration: true}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -21,7 +26,10 @@ jobs:
           cache-provider: basic
       - name: Build from public dependencies
         shell: bash
-        run: bash ./gradlew build compileIntegrationJava --no-daemon --console=plain
+        run: |
+          args=(build '-PneoForgeVersion=${{ matrix.neo }}' '-PjeiVersion=${{ matrix.jei }}' '-PcompatProfile=${{ matrix.profile }}' --no-daemon --console=plain)
+          if [[ '${{ matrix.integration }}' == 'true' ]]; then args+=(compileIntegrationJava); fi
+          bash ./gradlew "${args[@]}"
       - name: Verify empty-workspace migration and installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -30,7 +38,7 @@ jobs:
           ./scripts/Test-Installer.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: kubejs-editor-${{ matrix.os }}
+          name: kubejs-editor-${{ matrix.os }}-${{ matrix.neo }}-${{ matrix.jei }}
           path: |
             build/libs/kubejs-editor-*.jar
             build/dependencies-resolved.json

@@ -1,5 +1,5 @@
 param(
-    [string]$InstancePath='D:\Abyss\Creat Abyss\versions\1.21.1-NeoForge_21.1.259',
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$InstancePath,
     [string]$ReleaseDir=$PSScriptRoot
 )
 $ErrorActionPreference='Stop'

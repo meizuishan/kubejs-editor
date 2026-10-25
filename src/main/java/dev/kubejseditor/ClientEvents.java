@@ -10,7 +10,8 @@ import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import dev.kubejseditor.client.WorkspaceScreen;
 @EventBusSubscriber(modid = KubeJsRecipeEditor.MOD_ID, value = Dist.CLIENT)
 public class ClientEvents {
-    @SubscribeEvent public static void recipes(net.neoforged.neoforge.client.event.RecipesUpdatedEvent event){dev.kubejseditor.runtime.EditorRuntime.invalidateRecipes();}
+    @SubscribeEvent public static void recipes(net.neoforged.neoforge.client.event.RecipesUpdatedEvent event){dev.kubejseditor.runtime.EditorRuntime.recipesChanged();}
+    @SubscribeEvent public static void logout(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event){dev.kubejseditor.runtime.EditorRuntime.recipesChanged();dev.kubejseditor.client.CompatJeiLayouts.reset();dev.kubejseditor.runtime.RegistryDataSources.clear();}
     public static void open() {
         Minecraft mc=Minecraft.getInstance();
         if(mc.player==null)return;

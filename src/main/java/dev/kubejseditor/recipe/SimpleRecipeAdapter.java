@@ -2,6 +2,8 @@ package dev.kubejseditor.recipe;
 
 import com.google.gson.*;
 import java.util.*;
+import dev.kubejseditor.recipe.compat.*;
+import static dev.kubejseditor.recipe.compat.CompatDefinition.*;
 import static dev.kubejseditor.model.EditorProject.requireId;
 
 /** Experimental, document-preserving fields. No machine semantics are inferred from display text. */
@@ -13,8 +15,22 @@ public final class SimpleRecipeAdapter implements RecipeAdapter {
     public record Binding(List<String> path,boolean output,Format format){public String pointer(){return "/"+String.join("/",path);}}
     public SimpleRecipeAdapter(JsonObject source){type=source.get("type").getAsString();requireId(type);example=source.deepCopy();bindings(source);}
     public String type(){return type;}
+    @Override public boolean canCreate(){return false;}
     public String title(){return type+" · 简单适配（实验）";}
     public JsonObject newRecipe(){return example.deepCopy();}
+    /** Reuses the original codecs instead of converting native wrappers into a guessed format. */
+    @Override public RecipePresentation presentation(JsonObject data){
+        var definition=new CompatDefinition(type,"legacy-simple");var formats=new LinkedHashMap<String,Binding>();
+        for(var b:bindings(data)){var f=definition.add(b.pointer(),b.output?"产物":"输入",b.format.fluid?Kind.FLUID:Kind.ITEM,b.output?Role.OUTPUT:Role.INPUT);f.required=true;var v=b.format.read(get(data,b.path));if(!b.format.text&&(b.format.fluid||v.has("count")))f.quantity=b.format.fluid?"amount":"count";if(v.has("chance"))f.probability="chance";formats.put(b.pointer(),b);}
+        for(String path:parameters(data)){var v=get(data,List.of(path.split("/")));definition.add("/"+path,path,v.getAsJsonPrimitive().isBoolean()?Kind.BOOLEAN:Kind.NUMBER,Role.PARAMETER);}
+        return new RecipePresentation(data,definition){
+            @Override public JsonObject item(RecipePresentation.Binding binding){var b=formats.get(binding.path());var v=b.format.read(get(data,b.path));if(!v.has(binding.fluid()?"amount":"count"))v.addProperty(binding.fluid()?"amount":"count",1);return v;}
+            @Override public void writeItem(RecipePresentation.Binding binding,JsonObject edit){var b=formats.get(binding.path());var next=edit.deepCopy();if(binding.field().quantity.isBlank()&&next.has("count")){if(next.get("count").getAsBigDecimal().compareTo(java.math.BigDecimal.ONE)!=0)throw new IllegalArgumentException("此原料数量固定为 1");next.remove("count");}set(data,b.path,b.format.write(get(data,b.path),next));}
+            @Override public void remove(RecipePresentation.Binding binding){throw new IllegalArgumentException("简单适配保留原有槽位，请替换材料或产物");}
+            @Override public List<String> validate(){return SimpleRecipeAdapter.this.validate(data);}
+            @Override public void verifyRoundTrip(JsonObject encoded){SimpleRecipeAdapter.this.verifyRoundTrip(data,encoded);}
+        };
+    }
     @Override public RecipeLimits limits(){return new RecipeLimits(32,32,32,32);}
     @Override public List<String> validate(JsonObject data){try{
         for(var b:bindings(data)){var value=b.format.read(get(data,b.path));for(String key:List.of("count","amount"))if(value.has(key)){double n=value.get(key).getAsDouble();if(!Double.isFinite(n)||n<1||n!=Math.rint(n))throw new IllegalArgumentException(b.pointer()+" / "+key+" 必须为正整数");}if(value.has("chance")){double chance=value.get("chance").getAsDouble();if(!Double.isFinite(chance)||chance<0||chance>1)throw new IllegalArgumentException("非 0～1 概率需要专用适配："+b.pointer());}}
@@ -22,7 +38,6 @@ public final class SimpleRecipeAdapter implements RecipeAdapter {
     }catch(RuntimeException e){return List.of(e.getMessage());}}
     public static List<Binding> bindings(JsonObject data){
         if(data.has("pattern")||data.has("sequence")||data.has("key"))throw new IllegalArgumentException("网格、序列或动态配方需要专用适配器");
-        if(data.has("neoforge:conditions")||data.has("conditions"))throw new IllegalArgumentException("含加载条件的配方保留只读，避免覆盖原有条件");
         var out=new ArrayList<Binding>();
         for(var e:data.entrySet()){
             boolean input=INPUTS.contains(e.getKey()),output=OUTPUTS.contains(e.getKey());if(!input&&!output)continue;
@@ -71,7 +86,7 @@ public final class SimpleRecipeAdapter implements RecipeAdapter {
     public static List<String> parameters(JsonObject data){var result=new ArrayList<String>();collectParameters(data,"",result,0);return List.copyOf(result);}
     private static void collectParameters(JsonObject data,String prefix,List<String> result,int depth){
         for(var entry:data.entrySet()){
-            if(INPUTS.contains(entry.getKey())||OUTPUTS.contains(entry.getKey())||Set.of("type","components","neoforge:conditions","conditions").contains(entry.getKey()))continue;
+            if(INPUTS.contains(entry.getKey())||OUTPUTS.contains(entry.getKey())||Set.of("type","components","neoforge:conditions").contains(entry.getKey()))continue;
             String path=prefix+entry.getKey();JsonElement value=entry.getValue();
             if(value.isJsonPrimitive()&&(value.getAsJsonPrimitive().isNumber()||value.getAsJsonPrimitive().isBoolean()))result.add(path);
             else if(depth<2&&value.isJsonObject())collectParameters(value.getAsJsonObject(),path+"/",result,depth+1);

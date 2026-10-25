@@ -13,5 +13,6 @@ public class KubeJsRecipeEditor {
 
     public KubeJsRecipeEditor(IEventBus modEventBus, ModContainer modContainer) {
         ModMenuTypes.MENU_TYPES.register(modEventBus);
+        modEventBus.addListener(dev.kubejseditor.runtime.GeneratedDataPack::register);
     }
 }

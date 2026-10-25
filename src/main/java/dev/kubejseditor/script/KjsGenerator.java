@@ -5,6 +5,7 @@ import dev.kubejseditor.model.EditorProject;
 import dev.kubejseditor.model.ItemKinds;
 import dev.kubejseditor.recipe.RecipeAdapters;
 import dev.kubejseditor.recipe.CraftingGrid;
+import dev.kubejseditor.recipe.LoadConditions;
 import dev.kubejseditor.storage.ProjectStore;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -17,23 +18,29 @@ public final class KjsGenerator {
     public static Output generate(EditorProject project) {
         project.validateStructure(); Map<String, byte[]> files = new LinkedHashMap<>();
         StringBuilder recipe = new StringBuilder(HEADER + "// priority: -100\nServerEvents.recipes(event => {\n");
+        var normal=project.recipes.values().stream().filter(d->d.registryTarget==null).toList();
+        for(var d:project.recipes.values())if(d.enabled&&d.registryTarget!=null){d.registryTarget.check();files.put(d.registryTarget.path(),bytes(ProjectStore.JSON.toJson(d.registryTarget.generated(d))));}
+        boolean conditional=normal.stream().anyMatch(d->d.enabled&&!d.operation.equals("remove")&&LoadConditions.present(CraftingGrid.generated(d)));
+        if(conditional)recipe.append("  const editorConditions = Java.loadClass('net.neoforged.neoforge.common.conditions.ICondition');\n  const editorJson = Java.loadClass('com.google.gson.JsonParser');\n");
         // In KubeJS 2101.7.2 an IDFilter only searches originalRecipes. Remove matching
         // additions from earlier script callbacks explicitly, before introducing our versions.
-        List<String> ids=project.recipes.values().stream().filter(d->d.enabled).map(d->d.id).toList();
+        List<String> ids=normal.stream().filter(d->d.enabled).map(d->d.id).toList();
         if(!ids.isEmpty())recipe.append("  const editorIds = ").append(ProjectStore.JSON.toJson(ids)).append(";\n  event.addedRecipes.forEach(recipe => { if (editorIds.indexOf(String(recipe.getId())) >= 0) recipe.remove(); });\n");
         // Explicit removals first, additions last. Each ID is emitted exactly once.
-        for (var d : project.recipes.values()) if (d.enabled && Set.of("remove","replace").contains(d.operation)) recipe.append("  event.remove({id:").append(quote(d.id)).append("});\n");
-        for (var d : project.recipes.values()) if (d.enabled && !d.operation.equals("remove")) {
-            dev.kubejseditor.recipe.SimpleRecipes.restore(d);
+        for (var d : normal) if (d.enabled && Set.of("remove","replace").contains(d.operation)) recipe.append("  event.remove({id:").append(quote(d.id)).append("});\n");
+        for (var d : normal) if (d.enabled && !d.operation.equals("remove")) {
+            if(!d.forceNative)dev.kubejseditor.recipe.SimpleRecipes.restore(d);
             JsonObject generated=CraftingGrid.generated(d);
-            List<String> errors = RecipeAdapters.validateData(generated);
+            List<String> errors = d.forceNative||LoadConditions.present(generated)?List.of():RecipeAdapters.validateData(generated);
             if (!errors.isEmpty()) throw new IllegalArgumentException(d.id + "：" + String.join("；", errors));
+            if(LoadConditions.present(generated))recipe.append("  if (editorConditions.conditionsMatched(event.ops.json(), editorJson.parseString(").append(quote(ProjectStore.JSON.toJson(generated))).append("))) {\n");
             recipe.append("  event.custom(").append(ProjectStore.JSON.toJson(generated)).append(").id(").append(quote(d.id)).append(");\n");
+            if(LoadConditions.present(generated))recipe.append("  }\n");
         }
-        recipe.append("});\n"); if(!project.recipes.isEmpty())files.put("kubejs/server_scripts/kubejs_editor/recipes.js", bytes(recipe.toString()));
+        recipe.append("});\n"); if(!normal.isEmpty())files.put("kubejs/server_scripts/kubejs_editor/recipes.js", bytes(recipe.toString()));
         StringBuilder startup = new StringBuilder(HEADER), tips = new StringBuilder(HEADER);
         JsonObject lang = new JsonObject();
-        boolean restart = !project.items.isEmpty(), resources = false;
+        boolean restart = !project.items.isEmpty()||project.recipes.values().stream().anyMatch(d->d.enabled&&d.registryTarget!=null), resources = false;
         for (var item : project.items.values()) {
             validateItem(item);
             String id = quote(item.id);

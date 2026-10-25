@@ -6,6 +6,7 @@ import static dev.kubejseditor.model.EditorProject.requireId;
 
 public final class RecipeAdapters {
     private static final Map<String, RecipeAdapter> TYPES = new LinkedHashMap<>();
+    private static final Map<String, RecipeAdapter> CREATION = new LinkedHashMap<>();
     static {
         add("minecraft:crafting_shaped", "工作台 · 有序", "{pattern:['   ','   ','   '],key:{},result:{id:'minecraft:iron_ingot',count:1}}");
         add("minecraft:crafting_shapeless", "工作台 · 无序", "{ingredients:[],result:{id:'minecraft:iron_ingot',count:1}}");
@@ -34,9 +35,11 @@ public final class RecipeAdapters {
         VintageProcessing.register();
     }
     private RecipeAdapters() {}
-    public static void register(RecipeAdapter adapter) { TYPES.put(adapter.type(), adapter); }
-    public static void unregister(String type,RecipeAdapter expected){TYPES.remove(type,expected);}
+    public static void register(RecipeAdapter adapter) { TYPES.put(adapter.type(), adapter);if(adapter.canCreate())CREATION.put(adapter.type(),adapter); }
+    public static void unregister(String type,RecipeAdapter expected){TYPES.remove(type,expected);CREATION.remove(type,expected);}
     public static Collection<RecipeAdapter> all() { return Collections.unmodifiableCollection(TYPES.values()); }
+    public static Collection<RecipeAdapter> creation(){return Collections.unmodifiableCollection(CREATION.values());}
+    public static RecipeAdapter creation(String type){return CREATION.get(type);}
     public static RecipeAdapter get(String type) { return TYPES.get(type); }
     public static JsonObject parse(String json) { return JsonParser.parseString(json).getAsJsonObject(); }
     private static void add(String type, String name, String defaults) {
@@ -53,6 +56,7 @@ public final class RecipeAdapters {
         try {
             requireId(data.get("type").getAsString());
             String type = data.get("type").getAsString();
+            if(get(type) instanceof dev.kubejseditor.recipe.compat.CompatibilityAdapter compat)return compat.validate(data);
             if(get(type) instanceof SimpleRecipeAdapter simple)return simple.validate(data);
             errors.addAll(RecipeLimits.forType(type).validate(data));
             errors.addAll(VintageProcessing.validate(data));

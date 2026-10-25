@@ -19,9 +19,11 @@ import java.util.*;
 @Mod("kubejs_editor_verification")
 public final class IntegrationVerification {
     private final List<String> failures=new ArrayList<>();private int checks;
-    public IntegrationVerification(){
+    public IntegrationVerification(net.neoforged.bus.api.IEventBus modBus){
+        if(GenericCompatFixture.enabled())GenericCompatFixture.register(modBus);
+        if(Boolean.getBoolean("kubejs.editor.verifyRegistry")||Boolean.getBoolean("kubejs.editor.verifyUiRevision")){RegistryVerificationFixture.register(modBus);net.minecraft.SharedConstants.IS_RUNNING_IN_IDE=false;System.setProperty("neoforge.enableGameTest","false");}
         // Match production startup: do not scan third-party dev-only GameTests with optional APIs.
-        if(Boolean.getBoolean("kubejs.editor.verifyPackStartup")||Boolean.getBoolean("kubejs.editor.verifyPackRevoke")||Boolean.getBoolean("kubejs.editor.verifyReloadResilience")||Boolean.getBoolean("kubejs.editor.researchPack")){net.minecraft.SharedConstants.IS_RUNNING_IN_IDE=false;System.setProperty("neoforge.enableGameTest","false");}
+        if(GenericCompatFixture.enabled()||Boolean.getBoolean("kubejs.editor.verifyChanceMapping")||Boolean.getBoolean("kubejs.editor.verifyCompatInteractions")||Boolean.getBoolean("kubejs.editor.verifyUniversal")||Boolean.getBoolean("kubejs.editor.verifyPackStartup")||Boolean.getBoolean("kubejs.editor.verifyPackRevoke")||Boolean.getBoolean("kubejs.editor.verifyReloadResilience")||Boolean.getBoolean("kubejs.editor.researchPack")){net.minecraft.SharedConstants.IS_RUNNING_IN_IDE=false;System.setProperty("neoforge.enableGameTest","false");}
         System.out.println("[KubeJS Editor Verification] flags: packRevoke="+Boolean.getBoolean("kubejs.editor.verifyPackRevoke")
                 +", reloadResilience="+Boolean.getBoolean("kubejs.editor.verifyReloadResilience")
                 +", undo="+Boolean.getBoolean("kubejs.editor.verifyUndo")

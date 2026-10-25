@@ -24,7 +24,7 @@ public final class EditorCompatibility {
         StringBuilder text=new StringBuilder("KubeJS Editor · 当前兼容环境\n\n");
         for(String id:List.of("kubejs_editor","minecraft","neoforge","kubejs","rhino","jei","create","kubejs_create","create_dragons_plus","createaddition","createdieselgenerators","create_enchantment_industry","createvintageneoforged"))
             text.append(id).append("：").append(ModList.get().getModContainerById(id).map(m->m.getModInfo().getVersion().toString()).orElse("未安装")).append('\n');
-        text.append("\n必需：Minecraft 1.21.1、NeoForge 21.1.251+（21.1 系列）、KubeJS 2101.7.2-build.368+、JEI 19.27.0.335+（19 系列）。\nCreate 与附属为可选；未安装时相应入口不可用。Forge、Fabric 与其他 Minecraft 版本不能使用此 Jar。\n本机单人可写入；远程服务器仅草稿与导出。\n声明范围不等于逐版实测，组合与验证内容请参阅发布包的兼容性报告。\n\n顶部强制兼容栏（实验）：发现未内置的简单机器配方；复杂原料、加载条件和无实际来源的 JEI 展示保留只读。");
+        text.append("\n必需：Minecraft 1.21.1、NeoForge 21.1.199+（21.1 系列）、KubeJS 2101.7.2-build.368+、JEI 19.25.0.322+（19 系列）。\nCreate 与附属为可选；未安装时相应入口不可用。Forge、Fabric 与其他 Minecraft 版本不能使用此 Jar。\n本机单人可写入；远程服务器仅草稿与导出。\n声明范围不等于逐版实测，组合与验证内容请参阅发布包的兼容性报告。\n\n最后一栏为强制兼容：通用读取配方与 JEI 布局；默认忽略加载条件并按原生 Codec 校验。缺少真实写入来源的纯展示保留只读。JEI 19.25 使用配方边框书本入口，19.27 起使用侧边按钮。");
         return text.toString();
     }
     private EditorCompatibility(){}

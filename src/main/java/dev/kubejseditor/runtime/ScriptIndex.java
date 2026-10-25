@@ -14,8 +14,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ScriptIndex implements KubeJSPlugin {
     public static final Map<String,String> loaded=new ConcurrentHashMap<>();
     private static volatile RecipesKubeEvent recipes;
+    private static volatile Map<String,String> sourceIndex;
+    public static dev.latvian.mods.kubejs.recipe.schema.RecipeSchemaStorage schemas(){var event=recipes;return event==null?null:event.recipeSchemaStorage;}
+    public static net.minecraft.resources.RegistryOps<JsonElement> recipeOps(){var event=recipes;return event==null?null:event.ops.json();}
     public static volatile long serverGeneration,clientGeneration,startupGeneration,completedGeneration;
-    @net.neoforged.bus.api.SubscribeEvent public static void synced(net.neoforged.neoforge.event.OnDatapackSyncEvent event){completedGeneration=serverGeneration;}
+    @net.neoforged.bus.api.SubscribeEvent public static void synced(net.neoforged.neoforge.event.OnDatapackSyncEvent event){sourceIndex=null;completedGeneration=serverGeneration;}
     @Override public void afterScriptsLoaded(ScriptManager manager){
         String stage=manager.scriptType.isServer()?"server_scripts":manager.scriptType.isClient()?"client_scripts":"startup_scripts";
         loaded.keySet().removeIf(k->k.startsWith("kubejs/"+stage+"/"));
@@ -25,15 +28,16 @@ public final class ScriptIndex implements KubeJSPlugin {
         }
         // With zero server scripts KubeJS skips recipe events entirely. Never expose the
         // previous reload's additions/removals after the final generated file is revoked.
-        if(manager.scriptType.isServer()){recipes=null;serverGeneration++;}else if(manager.scriptType.isClient())clientGeneration++;else startupGeneration++;
+        if(manager.scriptType.isServer()){recipes=null;sourceIndex=null;serverGeneration++;}else if(manager.scriptType.isClient())clientGeneration++;else startupGeneration++;
     }
-    @Override public void beforeRecipeLoading(RecipesKubeEvent event,RecipeManagerKJS manager,Map<ResourceLocation,JsonElement> data){recipes=event;}
+    @Override public void beforeRecipeLoading(RecipesKubeEvent event,RecipeManagerKJS manager,Map<ResourceLocation,JsonElement> data){recipes=event;sourceIndex=null;CompatibilityRecipes.invalidateSchemas();}
     public static Map<String,String> recipeSources(){
+        var cached=sourceIndex;if(cached!=null)return cached;
         Map<String,String> sources=new LinkedHashMap<>();RecipesKubeEvent event=recipes;if(event==null)return sources;
         for(KubeRecipe r:event.originalRecipes.values())if(r.hasChanged()||r.removed)put(sources,r);
         for(KubeRecipe r:event.addedRecipes)put(sources,r);
         for(KubeRecipe r:event.removedRecipes)put(sources,r);
-        return sources;
+        sourceIndex=Collections.unmodifiableMap(sources);return sourceIndex;
     }
     private static void put(Map<String,String> out,KubeRecipe r){String source=r.sourceLine==null||r.sourceLine.isUnknown()?"KJS 修改 · 来源行未识别":r.sourceLine.toString();out.put(r.getOrCreateId().toString(),source);}
     public static List<String> errors(ConsoleJS console){synchronized(console.errors){return console.errors.stream().map(e->e.getText()+" "+e.sourceLines).toList();}}

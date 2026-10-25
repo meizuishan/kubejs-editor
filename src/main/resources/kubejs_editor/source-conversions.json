@@ -1,0 +1,4 @@
+[
+  {"category":"extendedae_plus:crystal_assembler_plus","sourceType":"extendedae:crystal_assembler","displayType":"extendedae_plus:crystal_assembler_plus","displayPrefix":"compat/extendedae/","label":"ExtendedAE Plus 晶体组装兼容配方"},
+  {"category":"extendedae_plus:circuit_cutter_plus","sourceType":"extendedae:circuit_cutter","displayType":"extendedae_plus:circuit_cutter_plus","displayPrefix":"compat/extendedae/","label":"ExtendedAE Plus 切割兼容配方"}
+]

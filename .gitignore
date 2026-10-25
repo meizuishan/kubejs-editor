@@ -46,3 +46,7 @@ run-gametest/
 
 run-v2/
 run-v*/
+
+# Local diagnostics and reusable isolated-world fixtures are not source artifacts.
+/logs/
+/.verification-fixtures/

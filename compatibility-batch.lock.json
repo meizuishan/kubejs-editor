@@ -1,0 +1,22 @@
+[
+  {
+    "name": "guideme-21.1.19.jar",
+    "sha256": "2ce254edb931c3c3cf81d69abaf8f4ce5b871bf85e64984f366bf044173bd66a"
+  },
+  {
+    "name": "Glodium-1.21-2.2-neoforge.jar",
+    "sha256": "369e99753df0bdc90a38a8c52df4abb37baf6b18c6ca130af4c7bc75fb160a85"
+  },
+  {
+    "name": "ExtendedAE-1.21-2.2.39-neoforge.jar",
+    "sha256": "f6a05cc5afab18ad8aa8ee02bee18bd980491fb1bb78a182a3e9a9919f94c32b"
+  },
+  {
+    "name": "extendedae_plus-1.6.3.jar",
+    "sha256": "1d89b055a7de508ec8dd5595ead646f4734c8fc5f7d843d7606454088118b41a"
+  },
+  {
+    "name": "appliedenergistics2-19.2.17.jar",
+    "sha256": "460d779a0609b81409907d9956de8f6f70a1b0912257e3e5c3c7e75ac9630e95"
+  }
+]

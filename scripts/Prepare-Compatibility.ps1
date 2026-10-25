@@ -1,4 +1,4 @@
-param([ValidatePattern('^run-v[0-9]+$')][string]$RunName,[ValidateSet('core','create','dragons','vintage','full')][string]$Profile)
+param([ValidatePattern('^run-v[0-9]+$')][string]$RunName,[ValidateSet('core','create','dragons','vintage','full')][string]$Profile,[string]$WorldTemplate)
 $ErrorActionPreference='Stop'
 if($PSVersionTable.PSVersion.Major -lt 7){throw '请使用 PowerShell 7'}
 $projectRoot=Split-Path $PSScriptRoot -Parent
@@ -21,11 +21,19 @@ foreach($mode in @(@('legacy','minecraft:crafting_shapeless'),@('optional','crea
  $id='compat:'+ $mode[0];$recipes[$id]=@{id=$id;operation='add';enabled=$true;data=$data}
 }
 @{schemaVersion=1;recipes=$recipes;items=@{};configs=@();assets=@{};scripts=@{}} | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $config 'project.json') -Encoding utf8
-$world=Join-Path $projectRoot 'run-v9/server/world'
-if(!(Test-Path -LiteralPath $world)){throw '缺少隔离验证世界；请先准备专用测试世界，不使用生产存档'}
 $destination=Join-Path $client 'saves/EditorVerification'
 New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
-Copy-Item -LiteralPath $world -Destination $destination -Recurse
+if(!$WorldTemplate){$WorldTemplate=Join-Path $projectRoot '.verification-fixtures/world-template.zip'}
+if(Test-Path -LiteralPath $WorldTemplate -PathType Leaf){
+ Add-Type -AssemblyName System.IO.Compression.FileSystem
+ $archive=[IO.Compression.ZipFile]::OpenRead($WorldTemplate)
+ try{if(!$archive.GetEntry('level.dat')){throw '模板 Zip 根目录必须包含 level.dat'};foreach($entry in $archive.Entries){$target=[IO.Path]::GetFullPath((Join-Path $destination $entry.FullName));if(!$target.StartsWith([IO.Path]::GetFullPath($destination)+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw '模板 Zip 路径越界'}}}finally{$archive.Dispose()}
+ [IO.Compression.ZipFile]::ExtractToDirectory([IO.Path]::GetFullPath($WorldTemplate),$destination)
+}else{
+ $world=if(Test-Path -LiteralPath $WorldTemplate -PathType Container){$WorldTemplate}else{Join-Path $projectRoot 'run-v9/server/world'}
+ if(!(Test-Path -LiteralPath (Join-Path $world 'level.dat'))){throw '缺少隔离世界模板；请用 -WorldTemplate 指定专用测试世界目录或 Zip，不使用玩家存档'}
+ Copy-Item -LiteralPath $world -Destination $destination -Recurse
+}
 if($Profile -eq 'full'){
  $instance='D:\Abyss\Creat Abyss\versions\1.21.1-NeoForge_21.1.259'
  $mods=Join-Path $client 'mods';New-Item -ItemType Directory -Force -Path $mods | Out-Null

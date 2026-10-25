@@ -1,0 +1,22 @@
+[
+  {
+    "name": "forbidden_arcanus-2.6.1.jar",
+    "sha256": "8d5ef1557fcdd0ba9fe98c38458751bcbecb118c30924daa6fbdea0a54bf5785"
+  },
+  {
+    "name": "valhelsia_core-neoforge-1.21.1-1.1.5.jar",
+    "sha256": "8364c248ea4b8975327bc6cc36478ecdc1567110a6c8a47ce6b43e648edd1127"
+  },
+  {
+    "name": "curios-neoforge-9.5.1+1.21.1.jar",
+    "sha256": "a45df2125c26219974aba7507ffc9afe7b83acc941a386af3faacb1cc0056fde"
+  },
+  {
+    "name": "geckolib-neoforge-1.21.1-4.9.3.jar",
+    "sha256": "20a1995e4074f387ff549e2c57ea79dd7d41ee83c6afb9dd6a6e840e592d1c47"
+  },
+  {
+    "name": "Patchouli-1.21.1-93-NEOFORGE.jar",
+    "sha256": "959af52ed6640c316c3a8469203420be4aeea11ad6603890ba83bf48f5d9f993"
+  }
+]

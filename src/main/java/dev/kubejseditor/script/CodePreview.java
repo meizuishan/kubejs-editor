@@ -27,7 +27,7 @@ public final class CodePreview {
         try{
             StringBuilder text=new StringBuilder("// 单条记录预览；应用时按文件合并。\n");
             KjsGenerator.generate(single).files().forEach((path,bytes)->{
-                if(!path.equals(ProjectStore.FILE)&&!path.startsWith("kubejs/config/"))text.append("\n// ").append(path).append('\n').append(new String(bytes,StandardCharsets.UTF_8)).append('\n');
+                if(!path.equals(ProjectStore.FILE)&&(!path.startsWith("kubejs/config/")||path.startsWith(dev.kubejseditor.model.RegistryEntryTarget.DATA)))text.append("\n// ").append(path).append('\n').append(new String(bytes,StandardCharsets.UTF_8)).append('\n');
             });return text.toString();
         }catch(Exception e){return "// 尚未通过校验，以下为保留的原始数据，不能直接应用。\n// "+e.getMessage()+"\n\n"+ProjectStore.JSON.toJson(raw);}
     }

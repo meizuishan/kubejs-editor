@@ -26,6 +26,7 @@ public final class WorkspaceState {
         public boolean restart,client,resources;
         /** Transaction-only removal of editor rules; never a new recipe-disable rule. */
         public Set<String> revokedRecipes=new LinkedHashSet<>();
+        public Set<String> revokedItems=new LinkedHashSet<>();
         /** Registration removal is verified after a new JVM starts, never during /reload. */
         public Set<String> deletedItems=new LinkedHashSet<>();
     }
@@ -40,17 +41,35 @@ public final class WorkspaceState {
     }
     public EditorProject merge(EditorProject draft){
         EditorProject result=copy(applied,EditorProject.class);
-        result.recipes.putAll(copy(draft,EditorProject.class).recipes);result.items.putAll(copy(draft,EditorProject.class).items);
-        result.assets.putAll(draft.assets);result.configs=new ArrayList<>(draft.configs);result.scripts.clear();return result;
+        var pending=copy(draft,EditorProject.class);
+        result.recipes.putAll(pending.recipes);result.items.putAll(pending.items);
+        result.assets.putAll(pending.assets);result.configs=pending.configs;result.scripts.clear();return result;
     }
-    public boolean canRevokeRecipe(String id){return applied.recipes.containsKey(id)&&!frozen.getOrDefault(GENERATED.getFirst(),Set.of()).contains(id);}
+    public boolean canRevokeRecipe(String id){var d=applied.recipes.get(id);return d!=null&&(d.registryTarget!=null?!manualFiles.contains(d.registryTarget.path()):!frozen.getOrDefault(GENERATED.getFirst(),Set.of()).contains(id));}
     public EditorProject withoutRecipe(String id){
-        if(!canRevokeRecipe(id))throw new IllegalArgumentException("此规则已转为手写或不属于可撤销的编辑器规则，请从脚本管理编辑来源");
-        EditorProject desired=copy(applied,EditorProject.class);desired.recipes.remove(id);return desired;
+        return withoutRules(Set.of(id),Set.of());
+    }
+    public boolean canRevokeItem(String id){return applied.items.containsKey(id)&&frozen.entrySet().stream().noneMatch(e->!e.getKey().equals(GENERATED.getFirst())&&e.getValue().contains(id));}
+    public EditorProject withoutRules(Collection<String> recipes,Collection<String> items){
+        if(recipes.isEmpty()&&items.isEmpty())throw new IllegalArgumentException("请先选择需要删除的修改");
+        for(String id:recipes)if(!canRevokeRecipe(id))throw new IllegalArgumentException("配方已转为手写或不属于编辑器："+id);
+        for(String id:items)if(!canRevokeItem(id))throw new IllegalArgumentException("物品规则已转为手写或不属于编辑器："+id);
+        var desired=copy(applied,EditorProject.class);recipes.forEach(desired.recipes::remove);
+        for(String id:items)new dev.kubejseditor.model.PendingOperation("item",id,"物品修改").cancel(desired);
+        return desired;
+    }
+    /** Keep staged metadata for a texture still referenced by an unsubmitted item form. */
+    public Map<String,String> retainedAssets(EditorProject pending,Collection<String> deletingItems){
+        var result=new LinkedHashMap<String,String>();String prefix="kubejs/assets/kubejs_editor/textures/";
+        for(var entry:applied.assets.entrySet())if(entry.getKey().startsWith(prefix)&&entry.getKey().endsWith(".png")){
+            String location="kubejs_editor:"+entry.getKey().substring(prefix.length(),entry.getKey().length()-4);
+            if(pending.items.values().stream().anyMatch(i->!deletingItems.contains(i.id)&&dev.kubejseditor.model.BlockKinds.textures(i).contains(location)))result.put(entry.getKey(),entry.getValue());
+        }
+        return Collections.unmodifiableMap(result);
     }
     public boolean canDeleteRegisteredItem(String id){
         var item=applied.items.get(id);
-        return item!=null&&item.register&&frozen.entrySet().stream().noneMatch(e->!e.getKey().equals(GENERATED.getFirst())&&e.getValue().contains(id));
+        return item!=null&&item.register&&canRevokeItem(id);
     }
     public EditorProject withoutRegisteredItem(String id){
         if(!canDeleteRegisteredItem(id))throw new IllegalArgumentException("只能删除编辑器拥有的注册物品；手写注册请编辑来源脚本");
@@ -65,7 +84,7 @@ public final class WorkspaceState {
         String base=baseFor(actual);if(base==null||!isManaged(actual))throw new IOException("此文件不属于自动生成器");
         boolean recipes=base.equals(GENERATED.getFirst());
         if(recipes?!draft.recipes.isEmpty():!draft.items.isEmpty())throw new IOException("请先应用或移除关联表单草稿，再转为手写");
-        frozen.computeIfAbsent(base,k->new LinkedHashSet<>()).addAll(recipes?applied.recipes.keySet():applied.items.keySet());
+        frozen.computeIfAbsent(base,k->new LinkedHashSet<>()).addAll(recipes?applied.recipes.values().stream().filter(d->d.registryTarget==null).map(d->d.id).toList():applied.items.keySet());
         manualFiles.add(actual);managedHashes.remove(actual);
         int n=1;String next;do{next=base.substring(0,base.length()-3)+"_overrides_"+(n++)+".js";}while(manualFiles.contains(next)||Files.exists(root.resolve(next)));
         paths.put(base,next);
@@ -75,6 +94,17 @@ public final class WorkspaceState {
         if(base.equals(GENERATED.getFirst()))p.recipes.keySet().removeIf(id->ids.contains(id)&&!draft.recipes.containsKey(id));
         else p.items.keySet().removeIf(id->ids.contains(id)&&!draft.items.containsKey(id));
         return p;
+    }
+    /** Generate once in the normal case; regenerate only a script with frozen form entries. */
+    public Map<String,byte[]> output(EditorProject content,EditorProject draft){
+        var generated=dev.kubejseditor.script.KjsGenerator.generate(content).files();var files=new LinkedHashMap<>(generated);files.remove(ProjectStore.FILE);
+        for(String base:GENERATED){
+            files.remove(base);byte[] text=generated.get(base);
+            if(!frozen.getOrDefault(base,Set.of()).isEmpty())text=dev.kubejseditor.script.KjsGenerator.generate(forScript(content,draft,base)).files().get(base);
+            String target=outputPath(base);
+            if(text!=null){if(!target.equals(base)){int version=Integer.parseInt(target.substring(target.lastIndexOf('_')+1,target.length()-3));text=new String(text,StandardCharsets.UTF_8).replace("// priority: -100\n","// priority: "+(-1000-version)+"\n").getBytes(StandardCharsets.UTF_8);}files.put(target,text);}
+        }
+        return files;
     }
     public void promote(EditorProject pending){
         if(activation==null)return;

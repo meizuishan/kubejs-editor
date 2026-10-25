@@ -78,9 +78,9 @@ public final class EditorVerification {
         verifyRegistrationKinds();
         verifyItemRemovalAndInspection(root);
         verifyFanAndSizing();
-        checks+=TemplateVerification.run();
+        checks+=TemplateVerification.run();checks+=GenericPatchVerification.run();
         checks+=VintageVerification.run();
-        checks+=BlockVerification.run();checks+=ContentVerification.run();checks+=SimpleRecipeVerification.run();
+        checks+=BlockVerification.run();checks+=ContentVerification.run();checks+=SimpleRecipeVerification.run();checks+=CompatibilityVerification.run();checks+=LoadConditionVerification.run();checks+=BatchAndCacheVerification.run();checks+=RegistryDataVerification.run();checks+=MappingPreferencesVerification.run();
         System.out.println("PASS: "+checks+" authoring, templates, workspace migration, activation, ownership, text editing and rollback checks; "+RecipeAdapters.all().size()+" serializer fixtures.");
     }
     private static void verifyItemRemovalAndInspection(Path root)throws Exception{

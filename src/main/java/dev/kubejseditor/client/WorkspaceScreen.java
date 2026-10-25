@@ -47,6 +47,9 @@ public final class WorkspaceScreen extends Screen {
     private final PanelPreferences panels;
     private int draggingPanel;
     private List<EditorRuntime.Loaded> loaded=List.of();
+    private boolean catalogueLoaded;
+    private List<EditorRuntime.Loaded> labelledRecipes;
+    private Map<String,String> loadedNames=Map.of();
     private int tab,createTab,listOffset,propertyOffset,canvasScroll,canvasScrollX,selectedStep=-1;
     private boolean browseLoaded,dirty,readOnly,compact;
     private String filter="",status="未应用内容自动保存 · 一键应用提交全部操作";
@@ -55,6 +58,7 @@ public final class WorkspaceScreen extends Screen {
     private RecipeCanvas.Slot selectedSlot;
     private CreateConfigs.Entry selectedConfig;
     private List<CreateConfigs.Entry> configs=List.of();
+    private boolean configsLoaded;
     private List<Row> rows=List.of();
     private final List<Form> form=new ArrayList<>();
     private final List<GhostTarget> ghosts=new ArrayList<>();
@@ -82,18 +86,22 @@ public final class WorkspaceScreen extends Screen {
     }
     public static void openRecipe(String id,Screen previous){
         WorkspaceScreen screen=new WorkspaceScreen();screen.returnTo=previous;
-        var match=screen.loaded.stream().filter(r->r.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("此配方已变更，请重新打开 JEI"));
+        var match=EditorRuntime.recipe(id);if(match==null)throw new IllegalArgumentException("此配方已变更，请重新打开 JEI");screen.loaded=List.of(match);
         screen.tab=RecipeAdapters.get(match.type())==null||RecipeAdapters.get(match.type()) instanceof SimpleRecipeAdapter?5:1;screen.browseLoaded=true;
         Minecraft.getInstance().setScreen(screen);screen.selectLoaded(match);
     }
     public Rect2i guiBounds(){return new Rect2i(leftPos,topPos,imageWidth,imageHeight);}
-    private void refreshRuntime(){loaded=EditorRuntime.recipes();try{configs=CreateConfigs.list();}catch(Exception e){status=e.getMessage();}}
+    private void refreshRuntime(){loaded=List.of();catalogueLoaded=false;configs=List.of();configsLoaded=false;}
+    private void ensureConfigs(){if(!configsLoaded){try{configs=CreateConfigs.list();}catch(Exception e){status=e.getMessage();}configsLoaded=true;}}
+    private void ensureCatalogue(){if(!catalogueLoaded){loaded=EditorRuntime.recipes();catalogueLoaded=true;}}
+    public void refreshAfterDeletion(){refreshRuntime();review=null;recipe=null;item=null;dirty=false;selectedSlot=null;appliedRecipeSelection=null;tab=4;}
+    public void batchResult(EditorRuntime.ReloadResult result){status=result.message();if(Minecraft.getInstance().screen==this){refreshAfterDeletion();rebuildWidgets();}}
     private void run(Checked action){try{if(EditorRuntime.busy())throw new IllegalStateException("正在应用，请稍候");action.run();}catch(Exception e){status="错误："+e.getMessage();}}
     @FunctionalInterface private interface Checked{void run()throws Exception;}
-    private void changed(){EditorRuntime.requireEditable();if(recipe!=null)recipe.enabled=true;dirty=true;review=null;autosaveTicks=0;if(status.startsWith("错误："))status="更改已更新，应用前会重新检查";}
+    private void changed(){EditorRuntime.requireEditable();if(recipe!=null)recipe.enabled=true;dirty=true;review=null;issues=List.of();autosaveTicks=0;if(status.startsWith("错误："))status="更改已更新，应用前会重新检查";}
     private Button button(String text,int x,int y,int w,Runnable action){return addRenderableWidget(Button.builder(UiText.component(text),b->run(action::run)).bounds(x,y,w,20).build());}
     private void showText(String title,String text){minecraft.setScreen(new TextScreen(this,title,text));}
-    private void switchTab(int value){stage();tab=value;if(value==5){recipe=null;item=null;dirty=false;status="强制兼容（实验）· 选择未知机器配方，核对适配状态后编辑";}listOffset=propertyOffset=canvasScroll=canvasScrollX=0;selectedSlot=null;rebuildWidgets();}
+    private void switchTab(int value){stage();tab=value;if(value==5){recipe=null;item=null;dirty=false;status="强制兼容 · 选择配方或拖入机器，自动读取可编辑字段";}listOffset=propertyOffset=canvasScroll=canvasScrollX=0;selectedSlot=null;rebuildWidgets();}
     @Override protected void init(){
         activationSeen=EditorRuntime.state().activation;
         imageWidth=Math.max(300,Math.min(width-(height<360||width<724?110:124),1160));imageHeight=height-8;super.init();leftPos=4;topPos=4;
@@ -105,18 +113,18 @@ public final class WorkspaceScreen extends Screen {
         ghosts.clear();form.clear();invalidFields.clear();String slotLabel=selectedSlot==null?null:selectedSlot.label();slots=List.of();
         if(recipe!=null&&(recipe.operation.equals("remove")||EditorCompatibility.hasRecipeType(recipe.data.get("type").getAsString())))try{slots=RecipeCanvas.slots(recipe);}catch(RuntimeException error){if(!readOnly)throw error;}
         selectedSlot=slots.stream().filter(s->s.label().equals(slotLabel)).findFirst().orElse(null);
-        String[] tabs={"新增功能","修改现有","机械动力","已有修改","强制兼容"};int[] pages={0,1,2,4,5};int tw=Math.min(100,(imageWidth-12)/5);
+        String[] tabs={"新增功能","修改现有","机械动力","已有修改","强制兼容"};int[] pages={0,1,2,4,5};int tw=Math.min(100,(imageWidth-12)/tabs.length);
         for(int i=0;i<tabs.length;i++){int n=pages[i];var nav=button((tab==n?"● ":"")+tabs[i],leftPos+6+i*tw,topPos+18,tw-3,()->switchTab(n));if(n==2&&!EditorCompatibility.hasCreate()){nav.active=false;nav.setTooltip(Tooltip.create(UiText.component("未安装机械动力 Create；通用配方和物品编辑仍可使用")));}}
         addRenderableWidget(Button.builder(Component.literal("×"),b->run(this::onClose)).bounds(leftPos+imageWidth-24,topPos,20,16).build());
         if(tab==3){buildReview();return;}
         if(tab==4){buildExisting();return;}
-        issues=EditorRuntime.validationIssues();
-        if(tab==5){button(SimpleRecipes.enabled()?"关闭实验模式":"开启实验模式",listX,48,104,this::toggleSimple);button("选择配方",listX+108,48,78,this::browseSimpleRecipes);button("适配说明",listX+190,48,78,()->showText("强制兼容（实验）",simpleHelp()));}
+        // Full validation is performed on explicit preview/apply, not every click, resize or keystroke.
+        if(tab==5){button("选择配方",listX,48,86,this::browseSimpleRecipes);button("使用说明",listX+90,48,86,()->showText("强制兼容",simpleHelp()));button("拖入机器",listX+180,48,86,()->showText("拖入机器","从 JEI 把机器拖到此按钮，按真实加工分类筛选配方"));ghosts.add(new GhostTarget(new Rect2i(listX+180,48,86,20),false,value->{if(value instanceof ItemStack machine)CompatMachines.choose(this,machine);}));}
         else if(tab==2){button("加工配方",listX,48,75,()->{stage();createTab=0;listOffset=propertyOffset=0;rebuildWidgets();});button("模组参数",listX+78,48,75,()->{stage();createTab=1;listOffset=propertyOffset=0;rebuildWidgets();});}
         else if(tab==1){button("现有配方",listX,48,82,()->browseRecipes(false));button("现有物品",listX+85,48,82,this::browseItems);}
         else {button("+配方",listX,48,80,this::newRecipe);button("+注册物品",listX+83,48,90,()->newItem(true));}
         if(tab==2&&createTab==0){button("+配方",listX+160,48,64,this::newRecipe);button("现有配方",listX+228,48,80,()->browseRecipes(true));}
-        if(tab==2&&createTab==1)button("选择参数",canvasX,72,100,this::browseConfigs).active=!configs.isEmpty();
+        if(tab==2&&createTab==1){ensureConfigs();button("选择参数",canvasX,72,100,this::browseConfigs).active=!configs.isEmpty();}
         searchBox("搜索操作 / 名称 / ID");
         buildRows();formTop=bodyY;
         if(tab==2&&createTab==1)buildConfig();else if(item!=null)buildItem();else buildRecipe();
@@ -139,9 +147,9 @@ public final class WorkspaceScreen extends Screen {
         button("更多",listX+170,height-28,52,this::more);
     }
     private void applyAll(){run(()->{
-        EditorRuntime.requireEditable();stage();EditorRuntime.saveDraft();issues=EditorRuntime.validationIssues();
-        if(!issues.isEmpty()){status="错误："+issues.size()+" 项检查未通过，请选择标红的操作修正";review=null;rebuildWidgets();return;}
-        review=EditorRuntime.review();if(review.changes().isEmpty()){status="没有待应用的修改";rebuildWidgets();return;}
+        EditorRuntime.requireEditable();stage();EditorRuntime.saveDraft();
+        try{review=EditorRuntime.review();}catch(IllegalArgumentException invalid){issues=EditorRuntime.validationIssues();status="错误："+invalid.getMessage();review=null;rebuildWidgets();return;}
+        if(review.changes().isEmpty()){status="没有待应用的修改";rebuildWidgets();return;}
         EditorRuntime.apply(review);recipe=null;item=null;dirty=false;selectedSlot=null;
         if(review.restartRequired()){status="已保存，等待重启；请在已有修改中查看";tab=4;existingMode=0;}
         else {status="正在应用全部操作并重载…";EditorRuntime.reloadResult(review.resourcesChanged(),r->{status=r.message();review=null;refreshRuntime();rebuildWidgets();});}
@@ -152,25 +160,21 @@ public final class WorkspaceScreen extends Screen {
         new ChoiceScreen.Choice("导出",()->run(()->status="已导出："+EditorRuntime.export())),
         new ChoiceScreen.Choice("整批回滚",()->run(()->{EditorRuntime.rollback();recipe=null;item=null;dirty=false;review=null;status="已恢复文件，正在重载";if(EditorRuntime.requiresRestart())status="回滚已保存，请重启游戏";else EditorRuntime.reloadResult(false,r->{status=r.success()?"已整批回滚并重载，待处理操作保留":r.message();refreshRuntime();rebuildWidgets();});})),
         new ChoiceScreen.Choice("KJS 日志",()->showText("KubeJS 日志",EditorRuntime.logs())),
+        new ChoiceScreen.Choice("最近耗时",()->showText("最近重载耗时",AppliedDeletionScreen.performance())),
         new ChoiceScreen.Choice("最近诊断",()->showText("最近诊断",dev.kubejseditor.runtime.EditorDiagnostics.read(EditorRuntime.root()))),
         new ChoiceScreen.Choice("复制最近诊断",()->{String text=dev.kubejseditor.runtime.EditorDiagnostics.read(EditorRuntime.root());minecraft.keyboardHandler.setClipboard(text);status="已复制最近诊断";rebuildWidgets();}),
         new ChoiceScreen.Choice("兼容信息",()->showText("兼容信息",EditorCompatibility.report())),
         new ChoiceScreen.Choice("重载配方模板",()->{stage();RecipeTemplates.load(EditorRuntime.root(),EditorCompatibility::requirement);refreshRuntime();showText("配方模板",RecipeTemplates.DIRECTORY+"\n\n"+String.join("\n",RecipeTemplates.diagnostics())+"\n\n模板只定义表单和校验，不执行代码；添加、替换或取消模板后请检查待办。未适配的原始配方数据仍保留。");}),
-        new ChoiceScreen.Choice("刷新运行数据",()->{refreshRuntime();review=null;})
+        new ChoiceScreen.Choice("刷新运行数据",()->{EditorRuntime.recipesChanged();refreshRuntime();review=null;})
         ,new ChoiceScreen.Choice("布局恢复默认",()->{panels.left=panels.right=-1;run(()->panels.save(EditorRuntime.root()));rebuildWidgets();})
     )));}
-    private static String simpleHelp(){return "强制兼容（实验）\n\n开启后发现未知机器的简单配方；从本页选择配方，或使用 JEI 书本按钮定位实际来源。\n\n支持替换现有物品／流体槽位、数量、已有概率及实际存在的数值字段。适配依据会列出原生字段和已取得的 JEI 槽位。\n\n复杂原料、加载条件、槽位不一致或无唯一实际来源时只读。每次应用仍通过原生校验、事务备份和真实加载核对。\n\n关闭后停止新类型发现；已保存的规则、重启恢复和撤销继续可用。";}
-    private void toggleSimple(){run(()->{
-        stage();String selected=recipe==null?null:recipe.id;SimpleRecipes.setEnabled(EditorRuntime.root(),!SimpleRecipes.enabled());EditorRuntime.invalidateRecipes();refreshRuntime();
-        var current=selected==null?Optional.<EditorRuntime.Loaded>empty():loaded.stream().filter(r->r.id().equals(selected)).findFirst();if(current.isPresent())selectLoaded(current.get());else rebuildWidgets();
-        status=SimpleRecipes.enabled()?"已开启简单配方发现；复杂或条件配方保留只读":"已关闭新类型发现，已保存规则仍可生成和恢复";
-    });}
-    private void browseSimpleRecipes(){stage();var names=labels();var choices=new ArrayList<ChoiceScreen.Choice>();
-        for(var value:loaded){var adapter=RecipeAdapters.get(value.type());if(adapter!=null&&!(adapter instanceof SimpleRecipeAdapter))continue;
-            String state=value.error()==null?"可编辑":"只读";choices.add(new ChoiceScreen.Choice("["+state+"] "+names.get(value.id())+" · "+value.id(),()->{tab=5;selectLoaded(value);},value.type()+"\n"+(value.error()==null?"简单适配；修改后经过原生校验":value.error())));
+    private static String simpleHelp(){return "强制兼容默认开启。\n\n选择配方或从 JEI 打开来源，自动读取原生 JSON、公开字段与槽位。可直接拖放、修改数值，必要时确认字段映射或编辑原编码。\n\n映射可以清空保存，也可重置为自动识别；材料、概率、组件和未知字段保留。原生数据包注册表条目需要重启，其余配方按实际来源重载。缺少权威写入来源的展示会说明原因。\n\n每次应用保留原生校验、事务备份与加载结果核对。";}
+    private void browseSimpleRecipes(){stage();ensureCatalogue();var names=labels();var choices=new ArrayList<ChoiceScreen.Choice>();
+        for(var value:loaded){var adapter=RecipeAdapters.get(value.type());if(adapter!=null&&!(adapter instanceof SimpleRecipeAdapter)&&!(adapter instanceof dev.kubejseditor.recipe.compat.CompatibilityAdapter))continue;
+            String state=value.capabilityLabel();choices.add(new ChoiceScreen.Choice("["+state+"] "+names.get(value.id())+" · "+value.id(),()->{tab=5;selectLoaded(value);},value.type()+"\n"+(value.error()==null?"已读取原生字段；修改后经过原生校验":value.error())));
         }minecraft.setScreen(new ChoiceScreen(this,"强制兼容 · 选择配方",choices));
     }
-    private void browseRecipes(boolean create){stage();List<ChoiceScreen.Choice> choices=new ArrayList<>();var names=labels();
+    private void browseRecipes(boolean create){stage();ensureCatalogue();List<ChoiceScreen.Choice> choices=new ArrayList<>();var names=labels();
         for(var r:loaded)if(!create||FanProcessing.createType(r.type()))choices.add(new ChoiceScreen.Choice(names.get(r.id())+" · "+RecipeNames.station(r.type())+" · "+r.id(),()->{tab=create?2:1;createTab=0;selectLoaded(r);},r.type(),VintageProcessing.dynamic(r.type())?"加工机制":"禁用配方",()->run(()->{stage();if(VintageProcessing.dynamic(r.type()))vintageDynamic(r.type());else queueRecipeRemoval(r.id(),r.data());}),()->!EditorRuntime.locked()&&!(project.recipes.containsKey(r.id())&&project.recipes.get(r.id()).operation.equals("remove"))));
         minecraft.setScreen(new ChoiceScreen(this,"选择现有配方",choices));
     }
@@ -179,10 +183,11 @@ public final class WorkspaceScreen extends Screen {
             choices.add(new ChoiceScreen.Choice(value.getDescription().getString()+" · "+id,()->{tab=1;var pending=project.items.get(id);if(pending!=null){selectItem(pending);return;}var old=EditorRuntime.state().applied.items.get(id);if(old!=null){selectItem(old);return;}ItemDraft d=new ItemDraft();d.id=id;d.register=false;d.name="";d.texture="";selectItem(d);}));}
         minecraft.setScreen(new ChoiceScreen(this,"选择现有物品",choices));
     }
-    private void browseConfigs(){stage();List<ChoiceScreen.Choice> choices=new ArrayList<>();for(var c:configs)choices.add(new ChoiceScreen.Choice(ConfigLabels.choice(c),()->{selectedConfig=c;configText=c.text(c.current());recipe=null;item=null;propertyOffset=0;},ConfigLabels.category(c)+"\n"+c.key()));minecraft.setScreen(new ChoiceScreen(this,"选择机械动力参数",choices));}
+    private void browseConfigs(){stage();ensureConfigs();List<ChoiceScreen.Choice> choices=new ArrayList<>();for(var c:configs)choices.add(new ChoiceScreen.Choice(ConfigLabels.choice(c),()->{selectedConfig=c;configText=c.text(c.current());recipe=null;item=null;propertyOffset=0;},ConfigLabels.category(c)+"\n"+c.key()));minecraft.setScreen(new ChoiceScreen(this,"选择机械动力参数",choices));}
     private void browseScripts(){run(()->{List<ChoiceScreen.Choice> choices=new ArrayList<>();for(var s:EditorScripts.list())choices.add(new ChoiceScreen.Choice(s.path()+" · "+s.status(),()->run(()->minecraft.setScreen(new ScriptEditorScreen(this,s.path())))));minecraft.setScreen(new ChoiceScreen(this,"脚本管理",choices));});}
     private Map<String,String> labels(){
-        Map<String,String> names=new LinkedHashMap<>();for(var r:loaded)names.put(r.id(),RecipeNames.main(r.data()));
+        if(labelledRecipes!=loaded){var base=new LinkedHashMap<String,String>();for(var r:loaded)base.put(r.id(),RecipeNames.main(r.data()));loadedNames=base;labelledRecipes=loaded;}
+        Map<String,String> names=new LinkedHashMap<>(loadedNames);
         EditorRuntime.state().applied.recipes.forEach((id,r)->names.put(id,RecipeNames.main(r.data)));
         project.recipes.forEach((id,r)->names.put(id,RecipeNames.main(r.data)));return RecipeNames.numbered(names);
     }
@@ -209,7 +214,7 @@ public final class WorkspaceScreen extends Screen {
             case "recipe" -> {var r=project.recipes.get(op.id());tab=r.simple?5:r.data!=null&&FanProcessing.createType(r.data.get("type").getAsString())?2:r.operation.equals("add")?0:1;createTab=0;selectRecipe(r,false);}
             case "item" -> {var i=project.items.get(op.id());tab=i.register?0:1;selectItem(i);}
             case "script" -> run(()->minecraft.setScreen(new ScriptEditorScreen(this,op.id())));
-            case "config" -> {stage();var d=project.configs.stream().filter(c->PendingOperation.configKey(c).equals(op.id())).findFirst().orElseThrow();tab=2;createTab=1;selectedConfig=configs.stream().filter(c->c.config().getModId().equals(d.modId)&&c.config().getFileName().equals(d.file)&&c.path().equals(d.path)&&(d.target==null||c.file().equals(EditorRuntime.root().resolve(d.target).normalize()))).findFirst().orElse(null);configText=d.value;recipe=null;item=null;rebuildWidgets();}
+            case "config" -> {stage();ensureConfigs();var d=project.configs.stream().filter(c->PendingOperation.configKey(c).equals(op.id())).findFirst().orElseThrow();tab=2;createTab=1;selectedConfig=configs.stream().filter(c->c.config().getModId().equals(d.modId)&&c.config().getFileName().equals(d.file)&&c.path().equals(d.path)&&(d.target==null||c.file().equals(EditorRuntime.root().resolve(d.target).normalize()))).findFirst().orElse(null);configText=d.value;recipe=null;item=null;rebuildWidgets();}
         }
     }
     private void cancelOperation(PendingOperation op){run(()->{
@@ -223,7 +228,7 @@ public final class WorkspaceScreen extends Screen {
         status="已取消本条修改";rebuildWidgets();
     });}
     private void buildExisting(){
-        button("配方修改",listX,48,88,()->{existingMode=0;listOffset=0;rebuildWidgets();});button("物品注册",listX+92,48,88,()->{existingMode=1;listOffset=0;rebuildWidgets();});
+        button("配方修改",listX,48,88,()->{existingMode=0;listOffset=0;rebuildWidgets();});button("物品注册",listX+92,48,88,()->{existingMode=1;listOffset=0;rebuildWidgets();});button("批量删除",listX+184,48,88,()->{stage();minecraft.setScreen(new AppliedDeletionScreen(this));});
         searchBox("名称 / ID");
         List<Row> list=new ArrayList<>();String q=filter.toLowerCase(Locale.ROOT);var names=labels();
         var applied=EditorRuntime.state().applied;var activation=EditorRuntime.state().activation;
@@ -234,11 +239,11 @@ public final class WorkspaceScreen extends Screen {
                 boolean revoking=activation!=null&&activation.revokedRecipes!=null&&activation.revokedRecipes.contains(r.id);
                 String state=revoking?(!EditorRuntime.activationError.isBlank()?"撤销失败，须回滚":"正在撤销"):activation!=null&&activation.submitted.recipes.containsKey(r.id)?(!EditorRuntime.activationError.isBlank()?"加载失败，须回滚":activation.restart?"等待重启":"等待加载验证"):"已生效";
                 String label=r.actionLabel()+" · "+names.getOrDefault(r.id,RecipeNames.main(r.data));
-                if(matches(label+" "+r.id,q))list.add(new Row(label,state+" · "+r.actionLabel()+"\n"+r.id+"\n× 撤销此条修改：确认后移除规则并立即重载",()->selectAppliedRecipe(r),new PendingOperation("applied_recipe",r.id,r.actionLabel())));
+                if(matches(label+" "+r.id,q))list.add(new Row(label,state+" · "+r.actionLabel()+"\n"+r.id+"\n× 加入批量删除：可选择多条，统一提交",()->selectAppliedRecipe(r),new PendingOperation("applied_recipe",r.id,r.actionLabel())));
             }
             for(var e:ScriptIndex.recipeSources().entrySet())if(!recipes.containsKey(e.getKey())&&matches(e.getKey()+" "+names.getOrDefault(e.getKey(),"")+" "+e.getValue(),q)){
-                var r=loaded.stream().filter(v->v.id().equals(e.getKey())).findFirst();String name=names.getOrDefault(e.getKey(),"已禁用配方");
-                list.add(new Row("来源脚本 · "+name,e.getKey()+"\n"+e.getValue(),()->{if(r.isPresent()){tab=1;selectLoaded(r.get());}else showText("KJS 禁用记录",e.getKey()+"\n"+e.getValue()+"\n请从更多 → 脚本管理编辑源规则");}));
+                String name=names.getOrDefault(e.getKey(),e.getKey());
+                list.add(new Row("来源脚本 · "+name,e.getKey()+"\n"+e.getValue(),()->{var r=EditorRuntime.recipe(e.getKey());if(r!=null){tab=1;selectLoaded(r);}else showText("KJS 禁用记录",e.getKey()+"\n"+e.getValue()+"\n请从更多 → 脚本管理编辑源规则");}));
             }
         }else for(var i:items.values()){
             boolean deleting=activation!=null&&activation.deletedItems!=null&&activation.deletedItems.contains(i.id);
@@ -261,16 +266,7 @@ public final class WorkspaceScreen extends Screen {
         }footer();
     }
     private void selectAppliedRecipe(RecipeDraft r){tab=1;createTab=0;selectRecipe(r,EditorRuntime.state().frozen.getOrDefault(WorkspaceState.GENERATED.getFirst(),Set.of()).contains(r.id));appliedRecipeSelection=r.id;rebuildWidgets();}
-    private void revokeAppliedRecipe(String id){run(()->{
-        EditorRuntime.requireEditable();stage();var rule=EditorRuntime.state().applied.recipes.get(id);
-        if(rule==null||!EditorRuntime.state().canRevokeRecipe(id))throw new IllegalArgumentException("此规则已转为手写或不属于可撤销的编辑器规则，请编辑来源脚本");
-        String effect=rule.operation.equals("remove")?"撤销禁用，恢复来源配方可合成。":rule.actionLabel().equals("新增")?"移除编辑器新增的配方。":"完全取消编辑器对此配方的替换，恢复来源配方；不会恢复为上一次编辑版本。";
-        minecraft.setScreen(new ConfirmScreen(confirmed->{minecraft.setScreen(this);if(confirmed)run(()->{
-            EditorRuntime.revokeRecipe(id,r->{status=r.message();refreshRuntime();rebuildWidgets();});
-            recipe=null;item=null;dirty=false;selectedSlot=null;appliedRecipeSelection=null;review=null;
-            status="正在撤销此条修改并重载；其他待办不会提交";rebuildWidgets();
-        });},UiText.component("确认撤销配方修改"),Component.literal(RecipeNames.main(rule.data)+"\n"+id+"\n\n"+effect+"\n\n确认后立即备份、保存并重载；不生成新的修改记录，不提交其他待办。"),UiText.component("确认撤销"),UiText.component("取消")));
-    });}
+    private void revokeAppliedRecipe(String id){run(()->{EditorRuntime.requireEditable();stage();minecraft.setScreen(new AppliedDeletionScreen(this,id,false));});}
     private void deleteRecipe(){
         if(recipe!=null)queueRecipeRemoval(recipe.id,recipe.data);
     }
@@ -283,13 +279,14 @@ public final class WorkspaceScreen extends Screen {
     }
     private boolean matches(String s,String q){return s.toLowerCase(Locale.ROOT).contains(q);}
     private int visibleRows(){return Math.max(1,(bottom-bodyY-6)/30);}
-    private void selectRecipe(RecipeDraft r,boolean ro){stage();try{SimpleRecipes.restore(r);}catch(Exception error){ro=true;status=error.getMessage();}appliedRecipeSelection=null;recipe=ProjectStore.JSON.fromJson(ProjectStore.JSON.toJson(r),RecipeDraft.class);if(recipe.data!=null&&RecipeAdapters.get(recipe.data.get("type").getAsString()) instanceof SimpleRecipeAdapter)recipe.simple=true;if(!project.recipes.containsKey(r.id)&&!recipe.operation.equals("remove")&&loaded.stream().anyMatch(v->v.id().equals(r.id)))recipe.operation="replace";if(recipe.origin==null){var prior=EditorRuntime.state().applied.recipes.get(recipe.id);recipe.origin=prior!=null?(prior.origin!=null?prior.origin:prior.operation.equals("add")?"add":"existing"):r.operation.equals("add")?"add":"existing";}recipeIdText=recipe.id;item=null;readOnly=ro||EditorRuntime.locked();dirty=false;selectedSlot=null;propertyOffset=canvasScroll=canvasScrollX=0;rebuildWidgets();}
+    private void selectRecipe(RecipeDraft r,boolean ro){stage();if(r.compatibility!=null){minecraft.setScreen(new CompatibilityScreen(this,r));return;}try{SimpleRecipes.restore(r);}catch(Exception error){ro=true;status=error.getMessage();}appliedRecipeSelection=null;recipe=ProjectStore.JSON.fromJson(ProjectStore.JSON.toJson(r),RecipeDraft.class);if(recipe.data!=null&&RecipeAdapters.get(recipe.data.get("type").getAsString()) instanceof SimpleRecipeAdapter)recipe.simple=true;if(!project.recipes.containsKey(r.id)&&!recipe.operation.equals("remove")&&loaded.stream().anyMatch(v->v.id().equals(r.id)))recipe.operation="replace";if(recipe.origin==null){var prior=EditorRuntime.state().applied.recipes.get(recipe.id);recipe.origin=prior!=null?(prior.origin!=null?prior.origin:prior.operation.equals("add")?"add":"existing"):r.operation.equals("add")?"add":"existing";}recipeIdText=recipe.id;item=null;readOnly=ro||EditorRuntime.locked();dirty=false;selectedSlot=null;propertyOffset=canvasScroll=canvasScrollX=0;rebuildWidgets();}
     private void selectLoaded(EditorRuntime.Loaded r){
+        if(r.registryTarget()!=null||dev.kubejseditor.runtime.CompatibilityRecipes.available(r.data())||tab==5&&SimpleRecipes.enabled()){stage();CompatibilityScreenOpen.open(this,r.id());return;}
         if(project.recipes.containsKey(r.id())){selectRecipe(project.recipes.get(r.id()),false);return;}RecipeDraft d=new RecipeDraft(r.id(),r.data()==null?RecipeAdapters.parse("{type:'minecraft:crafting_shapeless',ingredients:[],result:{id:'minecraft:air'}}"):r.data());d.operation="replace";var prior=EditorRuntime.state().applied.recipes.get(r.id());if(prior!=null&&prior.grid!=null&&!EditorRuntime.state().frozen.getOrDefault(WorkspaceState.GENERATED.getFirst(),Set.of()).contains(r.id()))d.grid=prior.grid.copy();
         // Keep the first external snapshot for revocation verification; legacy applied rules
         // without a snapshot stay presence-only rather than storing their edited data as source.
         if(prior!=null){if(prior.source!=null)d.source=prior.source.deepCopy();}else if(d.data!=null)d.source=d.data.deepCopy();
-        selectRecipe(d,r.error()!=null);status=r.error()==null?(recipe.simple?"实验适配：已导入原生字段，可查看适配依据":"已导入当前配方，修改后暂存为覆盖"):r.error();
+        selectRecipe(d,r.error()!=null);status=r.error()==null?(recipe.simple?"已导入原生字段，可查看字段信息":"已导入当前配方，修改后暂存为覆盖"):r.error();
     }
     private void selectItem(ItemDraft i){stage();appliedRecipeSelection=null;item=ProjectStore.JSON.fromJson(ProjectStore.JSON.toJson(i),ItemDraft.class);itemIdText=item.id;recipe=null;readOnly=EditorRuntime.locked()||EditorRuntime.state().frozen.entrySet().stream().anyMatch(e->!e.getKey().equals(WorkspaceState.GENERATED.getFirst())&&e.getValue().contains(i.id));dirty=false;propertyOffset=canvasScroll=canvasScrollX=0;rebuildWidgets();}
     private void newRecipe(){
@@ -297,11 +294,12 @@ public final class WorkspaceScreen extends Screen {
     }
     private boolean createCategory(String type){return FanProcessing.createType(type)||EditorModules.ownsCreateConfig(ResourceLocation.parse(type).getNamespace());}
     private void recipePicker(boolean create,Screen parent){
+        ensureCatalogue();
         List<ChoiceScreen.Choice> choices=new ArrayList<>();
         Set<String> stations=new HashSet<>();
-        for(RecipeAdapter a:RecipeAdapters.all())if(!FanProcessing.supports(a.type())&&createCategory(a.type())==create&&BuiltInRegistries.RECIPE_SERIALIZER.containsKey(ResourceLocation.parse(a.type()))&&stations.add(VintageProcessing.workstationKey(a.type()))){
+        for(RecipeAdapter a:RecipeAdapters.creation())if(!FanProcessing.supports(a.type())&&createCategory(a.type())==create&&BuiltInRegistries.RECIPE_SERIALIZER.containsKey(ResourceLocation.parse(a.type()))&&stations.add(VintageProcessing.workstationKey(a.type()))){
             var station=VintageProcessing.workstation(a.type());String search=station==null?a.type():station.types().stream().map(type->VintageProcessing.get(type).title()+" "+type).collect(java.util.stream.Collectors.joining("\n"));
-            choices.add(new ChoiceScreen.Choice(VintageProcessing.workstationTitle(a.type(),a.title()),()->{createRecipe(a);minecraft.setScreen(this);},search));
+            choices.add(new ChoiceScreen.Choice(VintageProcessing.workstationTitle(a.type(),a.title()),()->{createRecipe(a);if(!(a instanceof dev.kubejseditor.recipe.compat.CompatibilityAdapter))minecraft.setScreen(this);},search));
         }
         if(create){
             if(!availableFanModes().isEmpty())choices.add(new ChoiceScreen.Choice("鼓风机加工",()->chooseFanMode(true)));
@@ -313,7 +311,7 @@ public final class WorkspaceScreen extends Screen {
     private void vintageDynamic(String type){
         stage();if(type.endsWith("leaves_vibrating"))minecraft.setScreen(new ChoiceScreen(this,VintageProcessing.dynamicTitle(type),List.of(
             new ChoiceScreen.Choice("查看树叶掉落机制",()->showText(VintageProcessing.dynamicTitle(type),VintageProcessing.explanation(type))),
-            new ChoiceScreen.Choice("修改树叶振动开关",()->{tab=2;createTab=1;recipe=null;item=null;selectedConfig=configs.stream().filter(c->c.config().getModId().equals(VintageProcessing.MOD)&&c.path().getLast().equals("allowVibratingLeaves")).findFirst().orElse(null);if(selectedConfig!=null)configText=selectedConfig.text(selectedConfig.current());status=VintageProcessing.explanation(type);})
+            new ChoiceScreen.Choice("修改树叶振动开关",()->{ensureConfigs();tab=2;createTab=1;recipe=null;item=null;selectedConfig=configs.stream().filter(c->c.config().getModId().equals(VintageProcessing.MOD)&&c.path().getLast().equals("allowVibratingLeaves")).findFirst().orElse(null);if(selectedConfig!=null)configText=selectedConfig.text(selectedConfig.current());status=VintageProcessing.explanation(type);})
         )));
         else {
             var choices=new ArrayList<ChoiceScreen.Choice>();for(var value:loaded)if(value.type().startsWith("minecraft:smithing_"))choices.add(new ChoiceScreen.Choice(RecipeNames.main(value.data())+" · "+value.id(),()->{tab=1;selectLoaded(value);},value.type()));
@@ -329,6 +327,7 @@ public final class WorkspaceScreen extends Screen {
         minecraft.setScreen(new ChoiceScreen(this,"鼓风机加工方式",choices));
     }
     private void createRecipe(RecipeAdapter a){
+        if(a instanceof dev.kubejseditor.recipe.compat.CompatibilityAdapter){var d=new RecipeDraft(uniqueRecipeId(),a.newRecipe());d.origin="add";dev.kubejseditor.runtime.CompatibilityRecipes.annotate(d);minecraft.setScreen(new CompatibilityScreen(this,d));return;}
             appliedRecipeSelection=null;recipe=new RecipeDraft(uniqueRecipeId(),a.newRecipe());recipe.origin="add";recipe.simple=a instanceof SimpleRecipeAdapter;if((a instanceof RecipeTemplate||FanProcessing.createType(a.type()))&&!recipe.data.has("sequence")&&recipe.data.has("ingredients")){
                 JsonArray in=recipe.data.getAsJsonArray("ingredients");for(int i=0;i<in.size();i++)in.set(i,RecipeLimits.fluid(in.get(i))?RecipeAdapters.parse("{amount:250}"):JsonNull.INSTANCE);
             }if(!(a instanceof SimpleRecipeAdapter)&&recipe.data.has("result"))recipe.data.add("result",JsonNull.INSTANCE);else if(!(a instanceof SimpleRecipeAdapter)&&recipe.data.has("results")){JsonArray outputs=new JsonArray();outputs.add(JsonNull.INSTANCE);if(a.type().equals("create:emptying"))outputs.add(RecipeAdapters.parse("{amount:250}"));recipe.data.add("results",outputs);}recipeIdText=recipe.id;item=null;readOnly=false;dirty=true;selectedSlot=null;propertyOffset=canvasScroll=canvasScrollX=0;stage();
@@ -386,7 +385,7 @@ public final class WorkspaceScreen extends Screen {
         }
         if(!EditorCompatibility.hasRecipeType(recipe.data.get("type").getAsString())){button("兼容信息",canvasX,bodyY+24,90,()->showText("兼容信息",EditorCompatibility.unavailable(recipe.data.get("type").getAsString())+"\n\n"+EditorCompatibility.report()));return;}
         if(VintageProcessing.dynamic(recipe.data.get("type").getAsString())){button("管理实际加工机制",canvasX,bodyY+24,130,()->vintageDynamic(recipe.data.get("type").getAsString()));return;}
-        if(readOnly){if(!EditorRuntime.locked()&&recipe.data!=null&&RecipeAdapters.get(recipe.data.get("type").getAsString())==null)button("尝试简单适配",canvasX,bodyY+72,110,()->run(()->{String id=recipe.id;SimpleRecipes.setEnabled(EditorRuntime.root(),true);EditorRuntime.invalidateRecipes();refreshRuntime();selectLoaded(loaded.stream().filter(r->r.id().equals(id)).findFirst().orElseThrow());}));if(EditorRuntime.state().frozen.getOrDefault(WorkspaceState.GENERATED.getFirst(),Set.of()).contains(recipe.id))button("创建覆盖修改",canvasX,bodyY+24,100,()->{var current=loaded.stream().filter(r->r.id().equals(recipe.id)).findFirst().orElseThrow();selectLoaded(current);});button("查看数据",propX,bodyY,propW,()->showText(recipe.id,ProjectStore.JSON.toJson(recipe.data)));if(appliedRecipeSelection!=null)appliedUndoButton(canvasX,bodyY+48);else button("按 ID 禁用",propX,bodyY+24,propW,this::deleteRecipe);return;}
+        if(readOnly){if(!EditorRuntime.locked()&&recipe.data!=null&&RecipeAdapters.get(recipe.data.get("type").getAsString())==null)button("打开强制兼容",canvasX,bodyY+72,110,()->run(()->{String id=recipe.id;SimpleRecipes.setEnabled(EditorRuntime.root(),true);EditorRuntime.invalidateRecipes();refreshRuntime();selectLoaded(Objects.requireNonNull(EditorRuntime.recipe(id)));}));if(EditorRuntime.state().frozen.getOrDefault(WorkspaceState.GENERATED.getFirst(),Set.of()).contains(recipe.id))button("创建覆盖修改",canvasX,bodyY+24,100,()->{var current=Objects.requireNonNull(EditorRuntime.recipe(recipe.id));selectLoaded(current);});button("查看数据",propX,bodyY,propW,()->showText(recipe.id,ProjectStore.JSON.toJson(recipe.data)));if(appliedRecipeSelection!=null)appliedUndoButton(canvasX,bodyY+48);else button("按 ID 禁用",propX,bodyY+24,propW,this::deleteRecipe);return;}
         field("配方 ID",recipeIdText,s->{recipeIdText=s;changed();});
         choice("配方操作",recipe.operation,List.of("add","replace"),s->{if(!Set.of("add","replace").contains(s))throw new IllegalArgumentException("操作须为 add/replace/remove");recipe.operation=s;changed();});
         JsonObject data=recipe.data;
@@ -452,7 +451,7 @@ public final class WorkspaceScreen extends Screen {
         else choices.add(new ChoiceScreen.Choice(project.recipes.containsKey(recipe.id)&&!EditorRuntime.state().applied.recipes.containsKey(recipe.id)&&loaded.stream().noneMatch(r->r.id().equals(recipe.id))?"移除未应用配方":"禁用此配方",this::deleteRecipe));
         minecraft.setScreen(new ChoiceScreen(this,"配方操作",choices));
     }
-    private void appliedUndoButton(int x,int y){String id=appliedRecipeSelection==null?recipe.id:appliedRecipeSelection;var button=button("撤销此条修改",x,y,114,()->revokeAppliedRecipe(id));button.active=!EditorRuntime.locked()&&EditorRuntime.canApply()&&EditorRuntime.state().canRevokeRecipe(id);button.setTooltip(Tooltip.create(UiText.component("确认后移除编辑器规则并立即重载；不生成禁用记录，不提交其他待办")));}
+    private void appliedUndoButton(int x,int y){String id=appliedRecipeSelection==null?recipe.id:appliedRecipeSelection;var button=button("撤销此条修改",x,y,114,()->revokeAppliedRecipe(id));button.active=!EditorRuntime.locked()&&EditorRuntime.canApply()&&EditorRuntime.state().canRevokeRecipe(id);button.setTooltip(Tooltip.create(UiText.component("进入批量删除页，可选择多条修改统一提交；其他待办保留")));}
     private boolean canAdd(boolean output,boolean fluid){if(recipe!=null&&recipe.simple)return false;return !EditorRuntime.locked()&&RecipeLimits.forType(recipe.data.get("type").getAsString()).canAdd(recipe.data,output,fluid);}
     private void addEntry(boolean output,boolean fluid){EditorRuntime.requireEditable();if(!canAdd(output,fluid))throw new IllegalArgumentException("此配方的槽位数量已达上限");recipe.data.getAsJsonArray(output?"results":"ingredients").add(fluid?RecipeAdapters.parse("{amount:250}"):JsonNull.INSTANCE);changed();stage();rebuildWidgets();}
     private void buildSlotFields(RecipeCanvas.Slot slot){
@@ -596,7 +595,7 @@ public final class WorkspaceScreen extends Screen {
         boolean applied=EditorRuntime.state().applied.items.containsKey(id);
         var current=applied?EditorRuntime.state().applied.items.get(id):project.items.get(id);
         if(current==null||!current.register||applied&&!EditorRuntime.state().canDeleteRegisteredItem(id))throw new IllegalArgumentException("只能删除编辑器拥有的注册物品；手写注册请编辑来源脚本");
-        var blockers=applied?EditorRuntime.itemDeletionBlockers(id):List.<String>of();
+        if(applied){minecraft.setScreen(new AppliedDeletionScreen(this,id,true));return;}var blockers=applied?EditorRuntime.itemDeletionBlockers(id):List.<String>of();
         if(!blockers.isEmpty()){showText("无法删除注册物品","请先处理并应用以下引用，再删除物品。不会自动删除其他记录。\n\n"+id+"\n\n"+String.join("\n",blockers));return;}
         String name=current.name.isBlank()?id:current.name;
         String message=applied?"将移除编辑器对此物品的注册、名称、描述和贴图记录，保存备份后等待重启生效。背包或世界中已有的此物品／方块可能消失。其他待办不会提交，可从更多整批回滚。":"将删除这条未应用的物品注册。其他待办保留；引用它的配方会标记缺失物品。";
@@ -734,7 +733,7 @@ public final class WorkspaceScreen extends Screen {
         for(int i=propertyOffset;i<Math.min(form.size(),propertyOffset+Math.max(1,(bottom-formTop-16)/38));i++)g.drawString(font,font.plainSubstrByWidth(UiText.text(form.get(i).label),propW),propX,formTop+(i-propertyOffset)*38+2,0xFF94A3B8,false);
         if(tab==2&&createTab==1){renderConfig(g);return;}
         if(item!=null){if(item!=null){var id=ResourceLocation.tryParse(item.id);ItemStack stack=id!=null&&BuiltInRegistries.ITEM.containsKey(id)?new ItemStack(BuiltInRegistries.ITEM.get(id)):new ItemStack(net.minecraft.world.item.Items.PAPER);g.fill(canvasX+24,bodyY+20,canvasX+60,bodyY+56,0xFF334155);g.renderItem(stack,canvasX+34,bodyY+30);g.drawString(font,item.register?ItemKinds.NAMES.get(ItemKinds.kind(item))+(id!=null&&BuiltInRegistries.ITEM.containsKey(id)?" · 已注册，修改需重启":" · 重启后注册"):"已有物品 · 拖入选择",canvasX+6,bodyY+64,0xFFCBD5E1,false);}return;}
-        if(recipe==null){canvasMessage(g,tab==5?(SimpleRecipes.enabled()?"强制兼容（实验）已开启。选择配方或从 JEI 打开实际来源，查看适配依据后编辑。":"强制兼容（实验）默认关闭。点击开启实验模式，或先选择配方查看只读原因。复杂配方和来源不明确的展示保留只读。"):UiText.text("通过上方入口选择或新增内容"),bodyY+18,0xFF94A3B8);return;}
+        if(recipe==null){canvasMessage(g,tab==5?"选择配方或从 JEI 打开实际来源，也可拖入机器；自动读取可编辑字段。":UiText.text("通过上方入口选择或新增内容"),bodyY+18,0xFF94A3B8);return;}
         if(recipe.operation.equals("remove")){g.drawString(font,appliedRecipeSelection==null?"配方禁用 · 一键应用后生效":"已禁用此配方 · 撤销修改可恢复原来源",canvasX+8,bodyY+4,0xFFFCA5A5,false);return;}
         if(!EditorCompatibility.hasRecipeType(recipe.data.get("type").getAsString())){canvasMessage(g,EditorCompatibility.unavailable(recipe.data.get("type").getAsString())+"；可取消此条待办，安装对应模组后继续编辑。",bodyY+52);return;}
         if(VintageProcessing.dynamic(recipe.data.get("type").getAsString())){canvasMessage(g,VintageProcessing.explanation(recipe.data.get("type").getAsString()),bodyY+56);return;}

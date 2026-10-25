@@ -5,14 +5,6 @@ import mezz.jei.api.gui.handlers.*;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.registration.IAdvancedRegistration;
-import mezz.jei.api.gui.IRecipeLayoutDrawable;
-import mezz.jei.api.gui.buttons.*;
-import mezz.jei.api.gui.inputs.IJeiUserInput;
-import mezz.jei.api.gui.builder.ITooltipBuilder;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -23,10 +15,22 @@ import java.util.*;
 @JeiPlugin
 public final class WorkspaceJeiPlugin implements IModPlugin {
     public static mezz.jei.api.runtime.IJeiRuntime runtime;
-    @Override public void onRuntimeAvailable(mezz.jei.api.runtime.IJeiRuntime value){runtime=value;dev.kubejseditor.runtime.EditorRuntime.invalidateRecipes();}
-    @Override public void onRuntimeUnavailable(){runtime=null;dev.kubejseditor.recipe.SimpleRecipes.clearJeiEvidence();dev.kubejseditor.runtime.EditorRuntime.invalidateRecipes();}
+    private static long rebuildStarted;
+    public static long lastRebuildMs;
+    @Override public void onRuntimeAvailable(mezz.jei.api.runtime.IJeiRuntime value){runtime=value;if(rebuildStarted!=0){lastRebuildMs=(System.nanoTime()-rebuildStarted)/1_000_000;rebuildStarted=0;}dev.kubejseditor.runtime.EditorRuntime.invalidateRecipes();}
+    @Override public void onRuntimeUnavailable(){rebuildStarted=System.nanoTime();runtime=null;JeiRecipeButtons.clear();CompatJeiLayouts.clear();JeiRecipeSources.clear();dev.kubejseditor.recipe.SimpleRecipes.clearJeiEvidence();dev.kubejseditor.runtime.EditorRuntime.invalidateRecipes();}
     @Override public ResourceLocation getPluginUid(){return ResourceLocation.fromNamespaceAndPath("kubejs_editor","workspace");}
     @Override public void registerGuiHandlers(IGuiHandlerRegistration registration){
+        registration.addGuiScreenHandler(CompatibilityScreen.class,screen->{if(screen.width<2||screen.height<2)return null;int screenWidth=screen.width,screenHeight=screen.height,guiWidth=Math.max(1,screen.width-112);return new IGuiProperties(){
+            public Class<CompatibilityScreen> screenClass(){return CompatibilityScreen.class;}
+            public int guiLeft(){return 0;}public int guiTop(){return 0;}
+            public int guiXSize(){return guiWidth;}public int guiYSize(){return screenHeight;}
+            public int screenWidth(){return screenWidth;}public int screenHeight(){return screenHeight;}
+        };});
+        registration.addGuiScreenHandler(JeiDisplayScreen.class,screen->{if(screen.width<2||screen.height<2)return null;int w=screen.width,h=screen.height;return new IGuiProperties(){public Class<JeiDisplayScreen> screenClass(){return JeiDisplayScreen.class;}public int guiLeft(){return 0;}public int guiTop(){return 0;}public int guiXSize(){return Math.max(280,w-112);}public int guiYSize(){return h;}public int screenWidth(){return w;}public int screenHeight(){return h;}};});
+        registration.addGhostIngredientHandler(CompatibilityScreen.class,compatibilityGhostHandler());
+        registration.addGuiScreenHandler(FieldPatchScreen.class,screen->{int w=screen.width,h=screen.height;return new IGuiProperties(){public Class<FieldPatchScreen> screenClass(){return FieldPatchScreen.class;}public int guiLeft(){return 0;}public int guiTop(){return 0;}public int guiXSize(){return Math.max(280,w-112);}public int guiYSize(){return h;}public int screenWidth(){return w;}public int screenHeight(){return h;}};});
+        registration.addGhostIngredientHandler(FieldPatchScreen.class,patchGhostHandler());
         registration.addGuiScreenHandler(WorkspaceScreen.class,screen->{
             if(screen.width<2||screen.height<2||screen.guiBounds().getWidth()<2||screen.guiBounds().getHeight()<2)return null;
             // JEI compares the previous properties to the new snapshot after GUI resizing.
@@ -52,22 +56,12 @@ public final class WorkspaceJeiPlugin implements IModPlugin {
             @Override public void onComplete(){}
         });
     }
+    public static IGhostIngredientHandler<CompatibilityScreen> compatibilityGhostHandler(){return new IGhostIngredientHandler<CompatibilityScreen>(){
+            public <I> List<Target<I>> getTargetsTyped(CompatibilityScreen screen,ITypedIngredient<I> ingredient,boolean start){Object value=ingredient.getIngredient();var out=new ArrayList<Target<I>>();for(var target:screen.dropTargets(value))out.add(new Target<>(){public Rect2i getArea(){return target.area();}public void accept(I value){target.accept().accept(value);}});return out;}
+            public void onComplete(){}
+        };}
+    public static IGhostIngredientHandler<FieldPatchScreen> patchGhostHandler(){return new IGhostIngredientHandler<FieldPatchScreen>(){public <I> List<Target<I>> getTargetsTyped(FieldPatchScreen screen,ITypedIngredient<I> ingredient,boolean start){var result=new ArrayList<Target<I>>();for(var target:screen.ghostTargets(ingredient.getIngredient()))result.add(new Target<>(){public Rect2i getArea(){return target.area();}public void accept(I value){target.accept().accept(value);}});return result;}public void onComplete(){}};}
     @Override public void registerAdvanced(IAdvancedRegistration registration){
-        var raw=registration.getJeiHelpers().getGuiHelper().createDrawableItemStack(new ItemStack(Items.WRITABLE_BOOK));
-        var icon=new mezz.jei.api.gui.drawable.IDrawable(){public int getWidth(){return 10;}public int getHeight(){return 10;}public void draw(net.minecraft.client.gui.GuiGraphics g,int x,int y){g.pose().pushPose();g.pose().translate(x,y,0);g.pose().scale(0.625f,0.625f,1);raw.draw(g,0,0);g.pose().popPose();}};
-        registration.addRecipeButtonFactory(new mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory(){
-            @Override public <T> IIconButtonController createButtonController(IRecipeLayoutDrawable<T> layout){
-                var mc=Minecraft.getInstance();if(mc.level==null)return null;
-                var source=JeiRecipeSources.resolve(layout);ResourceLocation id=source.id();
-                if(id!=null)JeiRecipeSources.capture(layout,id);
-                return new IIconButtonController(){
-                    @Override public void initState(IButtonState state){state.setIcon(icon);state.setVisible(true);state.setActive(true);}
-                    @Override public void getTooltips(ITooltipBuilder tooltip){tooltip.add(Component.literal(id==null?"查看配方适配信息":"使用 KubeJS Editor 编辑此配方"));tooltip.add(Component.literal(id==null?source.reason():id.toString()));}
-                    @Override public boolean onPress(IJeiUserInput input){if(!input.isSimulate()){var previous=mc.screen;mc.tell(()->{
-                        try{if(id==null)mc.setScreen(new TextScreen(previous,"JEI 配方来源",JeiRecipeSources.diagnostics(layout,source.reason())));else{dev.kubejseditor.runtime.EditorRuntime.invalidateRecipes();WorkspaceScreen.openRecipe(id.toString(),previous);}}catch(Exception e){if(mc.player!=null)mc.player.sendSystemMessage(Component.literal("无法打开配方："+e.getMessage()));}
-                    });}return true;}
-                };
-            }
-        });
+        JeiRecipeButtons.register(registration);
     }
 }

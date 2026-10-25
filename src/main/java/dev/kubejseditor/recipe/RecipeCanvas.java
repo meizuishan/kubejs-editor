@@ -13,6 +13,7 @@ public final class RecipeCanvas {
     public static List<Slot> slots(JsonObject recipe) {
         if(!recipe.has("type"))return List.of();
         String serializer=recipe.get("type").getAsString();
+        if(RecipeAdapters.get(serializer) instanceof dev.kubejseditor.recipe.compat.CompatibilityAdapter compatibility){var view=compatibility.presentation(recipe);var list=new ArrayList<Slot>();int n=0;for(var b:view.bindings())if(b.field().slot()&&b.field().kind!=dev.kubejseditor.recipe.compat.CompatDefinition.Kind.OTHER&&!view.nativeValue(b).isJsonNull()){int i=n++;list.add(new Slot((i%8)*24,(i/8)*28,b.field().label,b.output(),b.fluid(),()->view.item(b),v->{if(v.isJsonNull())view.remove(b);else view.writeItem(b,v.getAsJsonObject());}));}return list;}
         if(RecipeAdapters.get(serializer) instanceof SimpleRecipeAdapter simple)return simple.slots(recipe);
         if(RecipeAdapters.get(serializer) instanceof RecipeTemplate template)return template.slots(recipe);
         if(recipe.has("sequence"))return SequenceLayout.slots(recipe);

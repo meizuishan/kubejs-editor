@@ -12,6 +12,7 @@ public final class RecipeNames {
     public static void invalidate(){chinese.clear();}
     public static String main(JsonObject data){
         if(data==null)return "未知配方";
+        if(data.has("type")&&RecipeAdapters.get(data.get("type").getAsString()) instanceof dev.kubejseditor.recipe.compat.CompatibilityAdapter a)try{var p=a.presentation(data);var out=p.bindings().stream().filter(b->b.output()).findFirst();if(out.isPresent()){var display=new JsonObject();display.add("result",p.item(out.get()));return main(display);}return data.get("type").getAsString()+" · 非物品结果";}catch(Exception ignored){}
         if(data.has("type")&&RecipeAdapters.get(data.get("type").getAsString()) instanceof dev.kubejseditor.recipe.SimpleRecipeAdapter simple)try{
             var output=simple.slots(data).stream().filter(dev.kubejseditor.recipe.RecipeCanvas.Slot::output).findFirst();if(output.isPresent()){var display=new JsonObject();display.add("result",output.get().get());return main(display);}
         }catch(Exception ignored){}

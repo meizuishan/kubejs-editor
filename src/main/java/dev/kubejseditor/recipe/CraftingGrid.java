@@ -26,7 +26,7 @@ public final class CraftingGrid {
     }
     public static void setOrdered(RecipeDraft draft,boolean ordered){ensure(draft);if(draft.data.get("type").getAsString().equals("create:mechanical_crafting"))throw new IllegalArgumentException("动力合成不支持无序切换");draft.data.addProperty("type",ordered?"minecraft:crafting_shaped":"minecraft:crafting_shapeless");sync(draft);}
     public static void sync(RecipeDraft draft){if(draft.grid!=null)write(draft.grid,draft.data);}
-    public static JsonObject generated(RecipeDraft draft){JsonObject data=draft.data.deepCopy();if(draft.grid!=null)write(draft.grid,data);return data;}
+    public static JsonObject generated(RecipeDraft draft){JsonObject data=draft.data.deepCopy();if(draft.grid!=null)write(draft.grid,data);return LoadConditions.effective(data,draft);}
     private static void write(GridDraft g,JsonObject data){
         if(data.get("type").getAsString().equals("minecraft:crafting_shapeless")){
             JsonArray ingredients=new JsonArray();for(var e:g.cells)if(!e.isJsonNull())ingredients.add(e.deepCopy());data.remove("pattern");data.remove("key");data.remove("show_notification");data.add("ingredients",ingredients);return;

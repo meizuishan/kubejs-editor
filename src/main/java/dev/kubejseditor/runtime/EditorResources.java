@@ -32,6 +32,9 @@ public final class EditorResources {
     }
     /** Captures original resource overrides once; removing a managed override restores that preimage. */
     public static Set<String> augment(Path root,EditorProject project,Map<String,byte[]> files)throws IOException{
+        return augment(root,project,files,Set.of());
+    }
+    public static Set<String> augment(Path root,EditorProject project,Map<String,byte[]> files,Set<String> retained)throws IOException{
         Map<String,byte[]> dynamic=new LinkedHashMap<>();
         Set<String> restored=new LinkedHashSet<>();
         for(var item:project.items.values())if(item.register&&dev.kubejseditor.model.ItemKinds.kind(item).equals("block")&&dev.kubejseditor.model.BlockKinds.options(item).type.equals("door"))dynamic.put(dev.kubejseditor.script.BlockRegistration.itemModelPath(item),dev.kubejseditor.script.BlockRegistration.itemModel(item));
@@ -60,12 +63,13 @@ public final class EditorResources {
         for(var output:dynamic.entrySet())if(!baselines.has(output.getKey())){
             Path path=FileTransaction.checkedPath(root,output.getKey());if(Files.exists(path))baselines.addProperty(output.getKey(),Base64.getEncoder().encodeToString(Files.readAllBytes(path)));else baselines.add(output.getKey(),JsonNull.INSTANCE);
         }
-        for(String old:new ArrayList<>(baselines.keySet()))if(!dynamic.containsKey(old)){
+        for(String old:new ArrayList<>(baselines.keySet()))if(!dynamic.containsKey(old)&&!retained.contains(old)){
             if(!old.startsWith("kubejs/assets/"))throw new IOException("资源基线清单损坏");
             if(!FileTransaction.checkedPath(root,old).startsWith(root.toAbsolutePath().normalize().resolve("kubejs/assets")))throw new IOException("资源基线清单路径损坏");
             dynamic.put(old,baselines.get(old).isJsonNull()?null:Base64.getDecoder().decode(baselines.get(old).getAsString()));baselines.remove(old);
             restored.add(old);
         }
+        for(String path:retained)if(!dynamic.containsKey(path))files.remove(path);
         files.putAll(dynamic);if(!baselines.isEmpty()||Files.exists(baselineFile))files.put(BASELINES,ProjectStore.JSON.toJson(baselines).getBytes(StandardCharsets.UTF_8));
         return Set.copyOf(restored);
     }

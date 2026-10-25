@@ -12,7 +12,7 @@ description='''Visual KubeJS authoring: recipes, items and Create configuration 
 [[dependencies.kubejs_editor]]
 modId="neoforge"
 type="required"
-versionRange="[21.1.251,21.2)"
+versionRange="[${neo_min_version},21.2)"
 ordering="NONE"
 side="BOTH"
 [[dependencies.kubejs_editor]]
@@ -24,7 +24,7 @@ side="BOTH"
 [[dependencies.kubejs_editor]]
 modId="kubejs"
 type="required"
-versionRange="[2101.7.2-build.368,)"
+versionRange="[${kubejs_min_version},)"
 ordering="AFTER"
 side="BOTH"
 [[dependencies.kubejs_editor]]

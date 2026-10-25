@@ -37,7 +37,7 @@ public final class CreateConfigs {
         for(Pending p:PENDING){var draft=new dev.kubejseditor.model.EditorProject.ConfigDraft();draft.modId=p.entry.config.getModId();draft.file=p.entry.config.getFileName();draft.type=p.entry.config.getType().name();draft.path=p.entry.path;draft.value=p.entry.text(p.value);draft.target=net.neoforged.fml.loading.FMLPaths.GAMEDIR.get().toAbsolutePath().normalize().relativize(p.entry.file).toString();project.configs.add(draft);}
     }
     public static void restore(dev.kubejseditor.model.EditorProject project){
-        clear();if(project.configs==null||project.configs.isEmpty())return;List<Entry> loaded=list();
+        clear();if(project.configs==null||project.configs.isEmpty())return;List<Entry> loaded=all();
         Path root=net.neoforged.fml.loading.FMLPaths.GAMEDIR.get().toAbsolutePath().normalize();
         for(var d:project.configs){var e=loaded.stream().filter(v->v.config.getModId().equals(d.modId)&&v.config.getFileName().equals(d.file)&&v.config.getType().name().equals(d.type)&&v.path.equals(d.path)&&(d.target==null||v.file.equals(root.resolve(d.target).normalize()))).findFirst();
             if(e.isPresent())try{queue(e.get(),d.value);}catch(Exception ignored){UNRESOLVED.add(d);}else UNRESOLVED.add(d);
@@ -45,8 +45,12 @@ public final class CreateConfigs {
     }
     public static void queue(Entry e,String text){Object value=e.parse(text);PENDING.removeIf(p->p.entry.config==e.config&&p.entry.file.equals(e.file)&&p.entry.path.equals(e.path));PENDING.add(new Pending(e,value));}
     public static List<Entry> list() {
+        return all().stream().filter(e->isCreate(e.config.getModId())).toList();
+    }
+    public static List<Entry> forMod(String mod){return all().stream().filter(e->e.config.getModId().equals(mod)).toList();}
+    public static List<Entry> all() {
         List<Entry> result=new ArrayList<>();
-            for(ModConfig.Type type:ModConfig.Type.values())for(ModConfig config:ModConfigs.getConfigSet(type))if(isCreate(config.getModId())) {
+            for(ModConfig.Type type:ModConfig.Type.values())for(ModConfig config:ModConfigs.getConfigSet(type)) {
                 if(config.getLoadedConfig()==null||config.getFullPath()==null||!(config.getSpec() instanceof ModConfigSpec spec))continue;
                 walk(config,spec.getSpec(),new ArrayList<>(),result);
             }

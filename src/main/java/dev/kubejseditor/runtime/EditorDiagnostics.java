@@ -41,6 +41,9 @@ public final class EditorDiagnostics {
         public boolean promoted;
         public String backup="";
         public List<String> notes=new ArrayList<>();
+        public java.util.Map<String,Long> timings=new java.util.LinkedHashMap<>();
+        public long elapsedMs;
+        public transient long startedNanos=System.nanoTime();
         /** Logged with the full stack, but never serialized into the diagnostic file. */
         public transient Throwable throwable;
     }
@@ -91,7 +94,9 @@ public final class EditorDiagnostics {
     public static synchronized void record(Path root, Diagnostic diagnostic){
         if(diagnostic==null)return;
         if(diagnostic.time==null||diagnostic.time.isBlank())diagnostic.time=Instant.now().toString();
+        diagnostic.elapsedMs=Math.max(0,(System.nanoTime()-diagnostic.startedNanos)/1_000_000);
         try{
+            if("reload".equals(diagnostic.operation)){var timings=new com.google.gson.JsonObject();timings.addProperty("time",diagnostic.time);timings.addProperty("elapsedMs",diagnostic.elapsedMs);timings.add("stages",ProjectStore.JSON.toJsonTree(diagnostic.timings));FileTransaction.atomicWrite(FileTransaction.checkedPath(root,"kubejs/config/kubejs_editor/last-performance.json"),ProjectStore.JSON.toJson(timings).getBytes(StandardCharsets.UTF_8));}
             Path file=FileTransaction.checkedPath(root,FILE);
             // A later plain success must not silently erase the last exceptional result.
             if("success".equals(diagnostic.outcome)&&preservesPrevious(file)){

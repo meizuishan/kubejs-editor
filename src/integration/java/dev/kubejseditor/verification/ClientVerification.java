@@ -156,7 +156,7 @@ public final class ClientVerification {
                     case 14 -> {
                         var layouts=field(mc.screen,"layouts");var list=(List<?>)field(layouts,"recipeLayoutsWithButtons");var buttons=(List<?>)field(list.getFirst(),"buttons");
                         mezz.jei.api.gui.buttons.IIconButtonController editor=null;
-                        for(Object b:buttons){var controller=(mezz.jei.api.gui.buttons.IIconButtonController)field(b,"controller");if(controller.getClass().getName().contains("WorkspaceJeiPlugin"))editor=controller;}
+                        for(Object b:buttons){var controller=(mezz.jei.api.gui.buttons.IIconButtonController)field(b,"controller");if(dev.kubejseditor.client.JeiRecipeButtons.isEditorController(controller))editor=controller;}
                         check(editor!=null,"JEI attached our edit button to the displayed recipe layout");
                         editor.onPress(new mezz.jei.api.gui.inputs.IJeiUserInput(){public com.mojang.blaze3d.platform.InputConstants.Key getKey(){return com.mojang.blaze3d.platform.InputConstants.Type.MOUSE.getOrCreate(0);}public int getModifiers(){return 0;}public boolean isSimulate(){return false;}public boolean is(net.minecraft.client.KeyMapping key){return false;}public boolean is(mezz.jei.api.runtime.IJeiKeyMapping key){return false;}});
                     }

@@ -28,6 +28,13 @@ public final class EditorProject {
         public GridDraft grid;
         /** Optional schema-2 authoring metadata, never emitted into the native recipe JSON. */
         public boolean simple;
+        public JsonObject compatibility;
+        /** Optional schema-2 policy. Null preserves legacy scripts; force workbench defaults to ignore. */
+        public String loadConditionPolicy;
+        /** Force workbench delegates validity to the registered native serializer. */
+        public boolean forceNative;
+        /** Native datapack entry destination; absent for ordinary RecipeManager recipes. */
+        public RegistryEntryTarget registryTarget;
         public boolean enabled = true;
         public JsonObject data;
         /**
@@ -40,8 +47,8 @@ public final class EditorProject {
         public String actionLabel(){return !enabled?"规则未启用":operation.equals("remove")?"已禁用":operation.equals("add")||"add".equals(origin)?"新增":"已替换";}
         public RecipeDraft copy(String newId) {
             RecipeDraft d = new RecipeDraft(newId, data == null ? new JsonObject() : data);
-            d.enabled = enabled;d.origin=origin;d.simple=simple;d.grid=grid==null?null:grid.copy();
-            d.source=source==null?null:source.deepCopy();return d;
+            d.enabled = enabled;d.origin=origin;d.simple=simple;d.grid=grid==null?null:grid.copy();d.loadConditionPolicy=loadConditionPolicy;d.forceNative=forceNative;
+            d.source=source==null?null:source.deepCopy();d.compatibility=compatibility==null?null:compatibility.deepCopy();d.registryTarget=registryTarget==null?null:dev.kubejseditor.storage.WorkspaceState.copy(registryTarget,RegistryEntryTarget.class);if(d.registryTarget!=null){d.registryTarget.entry=newId;d.id=d.registryTarget.id();}return d;
         }
     }
     /** Editor placement stays separate from the trimmed recipe consumed by Minecraft. */
@@ -82,7 +89,9 @@ public final class EditorProject {
         if(configs==null||assets==null||scripts==null)throw new IllegalArgumentException("草稿中的 configs/assets/scripts 不能为 null");
         recipes.forEach((id, d) -> {
             requireId(id); if (d == null || !id.equals(d.id)) throw new IllegalArgumentException("草稿配方 ID 不一致：" + id);
+            if(d.registryTarget!=null){d.registryTarget.check();if(!id.equals(d.registryTarget.id()))throw new IllegalArgumentException("注册表来源与编辑 ID 不一致："+id);}
             if (!Set.of("add", "replace", "remove").contains(d.operation)) throw new IllegalArgumentException("未知操作：" + d.operation);
+            if(d.loadConditionPolicy!=null&&!Set.of("preserve","ignore").contains(d.loadConditionPolicy))throw new IllegalArgumentException("无效加载条件策略："+id);
             if(d.grid!=null&&(d.grid.size<1||d.grid.size>9||d.grid.cells==null||d.grid.cells.size()!=d.grid.size*d.grid.size))throw new IllegalArgumentException("配方画布网格无效："+id);
             if(d.source!=null&&!d.source.isJsonObject())throw new IllegalArgumentException("来源配方快照无效："+id);
             if (!d.operation.equals("remove") && (d.data == null || !d.data.has("type"))) throw new IllegalArgumentException("配方缺少类型：" + id);

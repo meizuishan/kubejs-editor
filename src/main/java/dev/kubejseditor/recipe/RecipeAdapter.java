@@ -9,6 +9,9 @@ public interface RecipeAdapter {
     String title();
     JsonObject newRecipe();
     List<String> validate(JsonObject data);
+    /** Import/discovery adapters are not authoring templates. */
+    default boolean canCreate(){return true;}
+    default dev.kubejseditor.recipe.compat.RecipePresentation presentation(JsonObject data){return null;}
     default RecipeLimits limits(){return RecipeLimits.forType(type());}
     default boolean canEdit(JsonObject data) { return validate(data).isEmpty(); }
 }
