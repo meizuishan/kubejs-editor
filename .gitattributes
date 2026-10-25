@@ -3,3 +3,13 @@
 # are changed when only line endings change.
 src/generated/**/.cache/* text eol=lf
 src/generated/**/*.json text eol=lf
+
+# Exclude local work records from source archives.
+AGENTS.md export-ignore
+HANDOFF.md export-ignore
+CHANGELOG.md export-ignore
+.codex export-ignore
+docs/research export-ignore
+docs/verification.json export-ignore
+docs/GITHUB_RELEASE.md export-ignore
+docs/WORKSPACE_CLEANUP.md export-ignore

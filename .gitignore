@@ -50,3 +50,15 @@ run-v*/
 # Local diagnostics and reusable isolated-world fixtures are not source artifacts.
 /logs/
 /.verification-fixtures/
+
+# Local project instructions and work records are not public source.
+/AGENTS.md
+/HANDOFF.md
+/CHANGELOG.md
+/.codex/
+/*.jsonl
+/examples/research/
+/docs/*
+!/docs/distribution/
+!/docs/artwork/
+!/docs/recipe-template.schema.json

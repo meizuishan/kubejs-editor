@@ -4,7 +4,7 @@ An in-game visual KubeJS editor for **Minecraft 1.21.1 / NeoForge**. Current pre
 
 Edit recipes through JEI, generate standard KubeJS scripts, register content, and manage changes with validation, backups, batch revocation and rollback. Generic compatibility patches reuse real data sources and public mod interfaces.
 
-[Download 0.18.0](https://github.com/meizuishan/kubejs-editor/releases/tag/v0.18.0) · [中文](README.md) · [User guide](docs/GUIDE.md) · [Compatibility matrix](docs/VERSION_COMPATIBILITY.md)
+[Download 0.18.0](https://github.com/meizuishan/kubejs-editor/releases/tag/v0.18.0) · [中文](README.md) · [User guide](docs/distribution/GUIDE.md) · [Compatibility matrix](docs/distribution/COMPATIBILITY.md)
 
 ## Features
 
@@ -28,7 +28,7 @@ Edit recipes through JEI, generate standard KubeJS scripts, register content, an
 | JEI | **[19.25.0.322, 20)**; required on the client |
 | Create | Optional; integration range **[6.0.10, 6.1)** |
 
-This Jar does not target Forge, Fabric or other Minecraft versions. These ranges do not permit arbitrary dependency combinations: some newer JEI releases require newer NeoForge. Declared support, successful builds and actual client tests are documented separately in the [version matrix](docs/VERSION_COMPATIBILITY.md).
+This Jar does not target Forge, Fabric or other Minecraft versions. These ranges do not permit arbitrary dependency combinations: some newer JEI releases require newer NeoForge. Declared support, successful builds and actual client tests are documented separately in the [version matrix](docs/distribution/COMPATIBILITY.md).
 
 Version 0.18.0 passed **613 regression checks, 39 serialization fixtures, five representative build combinations and 270 final isolated-client checks**. All mods, machines and dependency combinations have not been game-tested. Full physical-machine processing, multiplayer and a fresh-JVM native-registry lifecycle were not revalidated for this version.
 
@@ -41,7 +41,7 @@ Force compatibility is **not a universal rewrite of arbitrary machine logic**. I
 - Ambiguous sources require confirmation. Manually selecting a source does not prove that it belongs to the displayed recipe; editing shared data can affect every consumer.
 - Configuration-driven, hardcoded, private-manager or shared-loot behavior is not guaranteed to be editable as a normal recipe. There is no arbitrary Java/private-field mutation backend.
 - Ordinary recipes normally reload; native datapack registries, registrations and some settings require a restart. Registry overlays require a compatible editor at runtime.
-- Direct application targets local singleplayer/integrated servers. Remote-server writing is not provided. See the [generic patch guide](docs/GENERIC_PATCHES.md).
+- Direct application targets local singleplayer/integrated servers. Remote-server writing is not provided. See the [generic patch guide](docs/distribution/GUIDE.md).
 
 ## Quick start
 
@@ -55,6 +55,6 @@ Storage supports 1–9 rows, 1–12 columns and 1–4096 items per slot (default
 
 ## Build and attribution
 
-Use JDK 21 and `./gradlew build`. Dependencies are resolved from public repositories with pinned hashes. See the [development guide](docs/DEVELOPMENT.md). Do not commit isolated instances, player worlds, local dependencies or credentials.
+Use JDK 21 and `./gradlew build`. Dependencies are resolved from public repositories with pinned hashes. See the [development guide](docs/distribution/BUILD.md). Do not commit isolated instances, player worlds, local dependencies or credentials.
 
 Based on [Astronomy20/KubeJS-Recipe-Editor](https://github.com/Astronomy20/KubeJS-Recipe-Editor), retaining its Git history, MIT license and copyright. See [NOTICE.md](NOTICE.md) for reuse and design references. This project is not an official Minecraft, NeoForge, KubeJS, JEI or Create product.

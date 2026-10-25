@@ -6,9 +6,9 @@
 
 从 JEI 拖入材料和产物，修改机器配方、注册物品和方块。编辑器生成标准 KubeJS 脚本，并提供待办、检查、备份、批量撤销和回滚。强制兼容采用通用来源读取和字段补丁，尽量复用模组已经公开的数据接口。
 
-[下载 0.18.0](https://github.com/meizuishan/kubejs-editor/releases/tag/v0.18.0) · [English](README.en.md) · [使用说明](docs/GUIDE.md) · [版本与验证范围](docs/VERSION_COMPATIBILITY.md)
+[下载 0.18.0](https://github.com/meizuishan/kubejs-editor/releases/tag/v0.18.0) · [English](README.en.md) · [使用说明](docs/distribution/GUIDE.md) · [版本与验证范围](docs/distribution/COMPATIBILITY.md)
 
-0.18.0 已公开发布为 **测试版（Pre-release）**，可直接下载使用；尚未标为稳定版。Windows／Linux 五组构建检查已通过。首次 Actions 失败记录对应已修复的测试脚本退出码，发布和后续检查结果见 [发布记录](docs/GITHUB_RELEASE.md)。安装时下载 `kubejs-editor-0.18.0.jar`；需要安装脚本和说明时下载 `kubejs-editor-0.18.0-release.zip`。
+0.18.0 已公开发布为 **测试版（Pre-release）**，可直接下载使用；尚未标为稳定版。Windows／Linux 五组构建检查已通过，当前状态见首页构建徽章。安装时下载 `kubejs-editor-0.18.0.jar`；需要安装脚本和说明时下载 `kubejs-editor-0.18.0-release.zip`。
 
 ## 功能
 
@@ -32,7 +32,7 @@
 | JEI | **[19.25.0.322, 20)**，客户端需要 |
 | Create | 可选；集成声明 **[6.0.10, 6.1)** |
 
-这不是 Forge／Fabric 或其他 Minecraft 版本的通用 Jar。依赖范围不能任意交叉组合：例如部分较新 JEI 自身要求较新 NeoForge。声明范围、构建通过与游戏内实测分别记录，详见 [兼容矩阵](docs/VERSION_COMPATIBILITY.md)。
+这不是 Forge／Fabric 或其他 Minecraft 版本的通用 Jar。依赖范围不能任意交叉组合：例如部分较新 JEI 自身要求较新 NeoForge。声明范围、构建通过与游戏内实测分别记录，详见 [兼容矩阵](docs/distribution/COMPATIBILITY.md)。
 
 0.18.0 已通过 **613 项回归、39 组序列化样例、五组代表性构建、270 项最终隔离客户端检查**。这些结果不代表所有模组、机器及依赖组合均已实测；物理机器完整消耗、多人和本版原生注册表真实重启循环未重新验收。
 
@@ -45,7 +45,7 @@
 - 来源有歧义时需要确认。手动选择真实数据源并不自动证明它与当前 JEI 展示关联；修改可能影响所有共享该来源的机器。
 - 配置或硬编码计算、私有管理器、共享战利品等机制，不保证能作为普通配方编辑；本版不提供任意 Java 逻辑／私有字段写入。
 - 普通配方通常通过重载生效；原生数据包注册表、内容注册及部分配置需要重启。原生注册表覆盖数据需要保留兼容版本的编辑器。
-- 直接应用面向本机单人世界／集成服务端，不提供远程服务器写入。完整行为与限制见 [通用补丁说明](docs/GENERIC_PATCHES.md)。
+- 直接应用面向本机单人世界／集成服务端，不提供远程服务器写入。完整行为与限制见 [通用补丁说明](docs/distribution/GUIDE.md)。
 
 ## 开始使用
 
@@ -60,6 +60,6 @@
 
 ## 开发与来源
 
-使用 JDK 21，通过 `./gradlew build` 构建；依赖从公开仓库按锁定哈希解析。源码、测试与说明见 [开发指南](docs/DEVELOPMENT.md)。隔离运行目录、玩家世界、本地依赖和凭据不应提交。
+使用 JDK 21，通过 `./gradlew build` 构建；依赖从公开仓库按锁定哈希解析。源码、测试与说明见 [开发指南](docs/distribution/BUILD.md)。隔离运行目录、玩家世界、本地依赖和凭据不应提交。
 
 本项目基于 [Astronomy20/KubeJS-Recipe-Editor](https://github.com/Astronomy20/KubeJS-Recipe-Editor)，保留其 Git 历史、MIT 许可及版权署名。详细复用范围和设计参考见 [NOTICE.md](NOTICE.md)。不是 Minecraft、NeoForge、KubeJS、JEI 或 Create 的官方项目。
