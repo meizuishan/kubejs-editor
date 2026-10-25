@@ -1,10 +1,14 @@
 # KubeJS Editor
 
-Minecraft **1.21.1 / NeoForge** 的游戏内 KubeJS 可视化编辑器。当前测试版：**0.18.0**。
+[![构建检查](https://github.com/meizuishan/kubejs-editor/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/meizuishan/kubejs-editor/actions/workflows/build.yml?query=branch%3Amain) · [下载 0.18.0 测试版](https://github.com/meizuishan/kubejs-editor/releases/tag/v0.18.0)
 
-通过 JEI 选择材料和配方，编辑器生成标准 KubeJS 脚本，并提供待办、检查、备份、批量撤销和回滚。强制兼容采用通用来源读取和字段补丁，尽量复用模组已经公开的数据接口。
+**游戏内 KubeJS 可视化配方与内容编辑器。** 面向 Minecraft **1.21.1 / NeoForge**，当前测试版 **0.18.0**。
+
+从 JEI 拖入材料和产物，修改机器配方、注册物品和方块。编辑器生成标准 KubeJS 脚本，并提供待办、检查、备份、批量撤销和回滚。强制兼容采用通用来源读取和字段补丁，尽量复用模组已经公开的数据接口。
 
 [下载 0.18.0](https://github.com/meizuishan/kubejs-editor/releases/tag/v0.18.0) · [English](README.en.md) · [使用说明](docs/GUIDE.md) · [版本与验证范围](docs/VERSION_COMPATIBILITY.md)
+
+0.18.0 已公开发布为 **测试版（Pre-release）**，可直接下载使用；尚未标为稳定版。Windows／Linux 五组构建检查已通过。首次 Actions 失败记录对应已修复的测试脚本退出码，发布和后续检查结果见 [发布记录](docs/GITHUB_RELEASE.md)。安装时下载 `kubejs-editor-0.18.0.jar`；需要安装脚本和说明时下载 `kubejs-editor-0.18.0-release.zip`。
 
 ## 功能
 
