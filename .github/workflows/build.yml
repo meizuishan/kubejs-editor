@@ -5,6 +5,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - {os: ubuntu-latest, neo: '21.1.199', jei: '19.25.0.322', profile: core, integration: false}

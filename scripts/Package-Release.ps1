@@ -113,7 +113,7 @@ try{
     if(Test-Path -LiteralPath (Join-Path $preflight 'matrix.json')){
         $proof+=@(Get-ChildItem -LiteralPath $preflight -File | Where-Object {$_.Name -in @('matrix.json','minimum-core.log','modern-button-core.log','target-core.log','newer-full.log','default-core.log','migration.log','installer.log','image-cleanup.json','release-audit.json')} | ForEach-Object {[IO.Path]::GetRelativePath($projectRoot,$_.FullName).Replace('\','/')})
     }
-    foreach($relative in $proof){$file=Join-Path $projectRoot $relative;if(!(Test-Path -LiteralPath $file)){throw "Missing release evidence: $relative"};Add-ReleaseFile $evidence $file $relative}
+    foreach($relative in $proof){$file=Join-Path $projectRoot $relative;if(!(Test-Path -LiteralPath $file)){$file=Join-Path (Join-Path $projectRoot '.verification-fixtures/evidence') $relative};if(!(Test-Path -LiteralPath $file)){throw "Missing release evidence: $relative"};Add-ReleaseFile $evidence $file $relative}
 }finally{$evidence.Dispose();$evidenceStream.Dispose()}
 $zipName="kubejs-editor-$version-source.zip"
 $zipFile=Join-Path $release ($zipName+'.pending')

@@ -41,3 +41,4 @@ foreach($mode in @('pending','activation','script','registered','invalid','owner
     Check (Test-Path -LiteralPath $legacy) "Rejected migration changed legacy workspace: $mode"
 }
 Write-Output "PASS: $checks migration, refusal, idempotency and rollback checks. Fixtures: $testRoot"
+$global:LASTEXITCODE=0

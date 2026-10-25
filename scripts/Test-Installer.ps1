@@ -34,3 +34,6 @@ Check ((Get-FileHash -LiteralPath $project).Hash -eq $hash) 'Rejected migration 
 Check (@(Get-ChildItem -LiteralPath (Join-Path $folder 'mods') -Filter '*.jar').Count -eq 3) 'Rejected installation changed old jars'
 Check (!(Test-Path -LiteralPath (Join-Path $folder ('mods/'+$name)))) 'New jar installed after migration refusal'
 Write-Output "PASS: $checks installation, hash, old-jar detection, idempotency and rejection checks. Fixtures: $root"
+# Expected rejection cases launch a child process with exit code 1. Do not leak
+# that deliberate failure into CI's enclosing PowerShell step after all checks pass.
+$global:LASTEXITCODE=0
