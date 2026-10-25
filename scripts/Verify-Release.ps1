@@ -7,8 +7,18 @@ $release=[IO.Path]::GetFullPath($ReleasePath)
 $buildText=Get-Content -LiteralPath (Join-Path $projectRoot 'build.gradle') -Raw
 if($buildText -notmatch "(?m)^version\s*=\s*'([^']+)'"){throw 'Cannot determine build version'}
 $version=$Matches[1]
+$policy=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'release-files.json') -Raw | ConvertFrom-Json
+if($policy.schemaVersion -ne 1){throw 'Unsupported release file policy.'}
+function AssertDistributableEntry([string]$name){
+    if([IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or @($name.Split('/') | Where-Object {$_ -in @('','..','.')}).Count){throw "Invalid archive path: $name"}
+    if($name -match '(?i)(^|/)(AGENTS\.md|HANDOFF\.md|CHANGELOG\.md|GITHUB_RELEASE\.md|WORKSPACE_CLEANUP\.md|DEVELOPMENT\.md|PUBLISHING\.md|verification\.json|verification-evidence\.zip)$|(^|/)(\.codex|\.git|\.verification-fixtures|logs|work|build|research|screenshots|saves|playerdata|accounts|sessions)/|\.jsonl$|\.log$'){throw "Internal file in distribution: $name"}
+}
 function ReadEntry($entry){$reader=[IO.StreamReader]::new($entry.Open());try{return $reader.ReadToEnd()}finally{$reader.Dispose()}}
 function HashEntry($entry){$inputStream=$entry.Open();try{return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($inputStream)).ToLowerInvariant()}finally{$inputStream.Dispose()}}
+function AssertPublicDocument($entry){
+    if($entry.FullName -notlike '*.md'){return}
+    if((ReadEntry $entry) -match '(?i)codex|AGENTS\.md|HANDOFF\.md|会话|交接|用户要求|本轮|run-v[0-9]+|D:\\Abyss|C:\\Users'){throw "Internal work notes in document: $($entry.FullName)"}
+}
 function VerifyZipSums($zip){
     $count=0
     foreach($line in (ReadEntry $zip.GetEntry('SHA256SUMS.txt')) -split '\r?\n'){
@@ -28,6 +38,7 @@ $jar=[IO.Compression.ZipFile]::OpenRead((Join-Path $release "kubejs-editor-$vers
 try{
     foreach($name in @('LICENSE','NOTICE.md','META-INF/neoforge.mods.toml','kubejs.plugins.txt','icon.png','kubejs_editor/source-conversions.json')){if(!$jar.GetEntry($name)){throw "Missing runtime entry: $name"}}
     foreach($entry in $jar.Entries){if($entry.FullName -match 'verification/|^META-INF/jarjar/|^io/github/abyss/|^assets/abyss_editor/|(^|/)screenshots/'){throw "Unexpected runtime content: $($entry.FullName)"}}
+    foreach($entry in $jar.Entries){if(!$entry.FullName.EndsWith('/')){AssertDistributableEntry $entry.FullName;AssertPublicDocument $entry}}
     $classes=@($jar.Entries | Where-Object FullName -like '*.class')
     foreach($entry in $classes){$inputStream=$entry.Open();$header=[byte[]]::new(8);try{$inputStream.ReadExactly($header)}finally{$inputStream.Dispose()};if($header[6]*256+$header[7] -ne 65){throw 'Runtime class does not target Java 21'}}
     $metadata=ReadEntry $jar.GetEntry('META-INF/neoforge.mods.toml')
@@ -36,7 +47,9 @@ try{
 $public=[IO.Compression.ZipFile]::OpenRead((Join-Path $release "kubejs-editor-$version-release.zip"))
 try{
     if(@($public.Entries.FullName | Group-Object | Where-Object Count -gt 1).Count){throw 'Duplicate public entries'}
-    foreach($entry in $public.Entries){if($entry.FullName -match '(^|/)(installed-backups|logs|screenshots|saves|playerdata|accounts|build|work|research)/|\.log$|verification-evidence\.zip$'){throw "Private/test content in public download: $($entry.FullName)"}}
+    $expectedPublic=@("kubejs-editor-$version.jar","kubejs-editor-$version-sources.jar",'Install-Release.ps1','Migrate-Workspace.ps1','LICENSE','NOTICE.md','SHA256SUMS.txt')+@($policy.documents | ForEach-Object target)
+    if(@(Compare-Object ($expectedPublic | Sort-Object) ($public.Entries.FullName | Sort-Object)).Count){throw 'Public archive does not match the explicit file allowlist.'}
+    foreach($entry in $public.Entries){AssertDistributableEntry $entry.FullName;AssertPublicDocument $entry}
     $publicChecks=VerifyZipSums $public
     foreach($entry in $public.Entries | Where-Object FullName -like '*.md'){
         $text=ReadEntry $entry
@@ -53,10 +66,18 @@ try{
 }finally{$public.Dispose()}
 $sources=[IO.Compression.ZipFile]::OpenRead((Join-Path $release "kubejs-editor-$version-source.zip"))
 try{
-    foreach($entry in $sources.Entries){if($entry.FullName -eq 'gradle/wrapper/gradle-wrapper.jar'){continue};if($entry.FullName -match '(^|/)(screenshots|\.git|run-v[0-9]+|saves|installed-backups)/|\.(jar|class)$'){throw "Unexpected developer archive entry: $($entry.FullName)"}}
+    if(@($sources.Entries.FullName | Group-Object | Where-Object Count -gt 1).Count){throw 'Duplicate source entries'}
+    foreach($entry in $sources.Entries){
+        AssertDistributableEntry $entry.FullName;AssertPublicDocument $entry
+        $allowed=$entry.FullName -in $policy.sourceFiles -or $entry.FullName -in @($policy.documents | ForEach-Object target)
+        foreach($directory in $policy.sourceDirectories){if($entry.FullName.StartsWith($directory+'/',[StringComparison]::Ordinal)){$allowed=$true;break}}
+        if(!$allowed){throw "Unlisted source archive entry: $($entry.FullName)"}
+        if($entry.FullName -ne 'gradle/wrapper/gradle-wrapper.jar' -and $entry.FullName -match '\.(jar|class)$'){throw "Unexpected developer archive entry: $($entry.FullName)"}
+    }
+    foreach($required in @($policy.sourceFiles)+@($policy.documents | ForEach-Object target)){if(!$sources.GetEntry($required)){throw "Missing source build file: $required"}}
 }finally{$sources.Dispose()}
-$evidence=[IO.Compression.ZipFile]::OpenRead((Join-Path $release 'verification-evidence.zip'))
-try{if(@($evidence.Entries | Where-Object FullName -match '(?i)\.(png|jpe?g|webp|gif|bmp)$').Count){throw 'Verification images remain in evidence ZIP'}}finally{$evidence.Dispose()}
+$sourceJar=[IO.Compression.ZipFile]::OpenRead((Join-Path $release "kubejs-editor-$version-sources.jar"))
+try{foreach($entry in $sourceJar.Entries){if(!$entry.FullName.EndsWith('/')){AssertDistributableEntry $entry.FullName;AssertPublicDocument $entry}}}finally{$sourceJar.Dispose()}
 $installerPassed=$null
 if($ExerciseInstaller){
     $fixture=Join-Path $projectRoot ('build/release-preflight-'+$version+'/public-install-'+[guid]::NewGuid().ToString('N'))
@@ -70,6 +91,7 @@ if($ExerciseInstaller){
     if(@(Get-ChildItem -LiteralPath (Join-Path $instance 'mods') -File -Filter '*.jar').Count -ne 1 -or (Get-Content -LiteralPath (Join-Path $instance 'keep.txt')) -ne 'player-file-fixture'){throw 'Public installer changed unrelated content or left duplicate Jars'}
     $installerPassed=$true
 }
-$audit=[ordered]@{version=$version;date=(Get-Date -Format 'yyyy-MM-dd');passed=$true;rootChecksumFiles=$rootChecks;publicChecksumFiles=$publicChecks;productionClasses=$classes.Count;javaClassVersion=65;identityAndDependencyRanges=$true;integrationAndBundledDependenciesAbsent=$true;validationImagesAbsent=$true;publicGuideLinksValid=$true;publicInstallerRequiresExplicitTarget=$true;publicZipInstallerExercised=$installerPassed;runtimeJarSha256=(Get-FileHash -LiteralPath (Join-Path $release "kubejs-editor-$version.jar")).Hash.ToLowerInvariant()}
+$audit=[ordered]@{version=$version;date=(Get-Date -Format 'yyyy-MM-dd');passed=$true;rootChecksumFiles=$rootChecks;publicChecksumFiles=$publicChecks;productionClasses=$classes.Count;javaClassVersion=65;identityAndDependencyRanges=$true;integrationAndBundledDependenciesAbsent=$true;validationImagesAbsent=$true;internalWorkRecordsAbsent=$true;explicitReleaseAllowlist=$true;publicGuideLinksValid=$true;publicInstallerRequiresExplicitTarget=$true;publicZipInstallerExercised=$installerPassed;runtimeJarSha256=(Get-FileHash -LiteralPath (Join-Path $release "kubejs-editor-$version.jar")).Hash.ToLowerInvariant()}
+New-Item -ItemType Directory -Force -Path (Join-Path $projectRoot "build/release-preflight-$version") | Out-Null
 $audit | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $projectRoot "build/release-preflight-$version/release-audit.json") -Encoding utf8NoBOM
-Write-Output "PASS: $rootChecks release checksums, $publicChecks public files, $($classes.Count) production classes, guide links and image exclusion."
+Write-Output "PASS: $rootChecks release checksums, $publicChecks public files, $($classes.Count) production classes, guide links, explicit allowlist and no internal records."
